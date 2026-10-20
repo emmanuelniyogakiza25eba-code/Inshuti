@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   ShieldCheck,
@@ -58,9 +58,50 @@ function TeamAvatar({
   );
 }
 
+const heroBackgrounds = [
+  '/tshirt.png',
+  '/Tshirt_img_5248750936257456493.jpg',
+];
+
 export default function LandingPage() {
   const [lang, setLang] = useState<'en' | 'rw'>('en');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [heroBackgroundIndex, setHeroBackgroundIndex] = useState(0);
+  const [orderModalOpen, setOrderModalOpen] = useState(false);
+  const [momoInstructionsOpen, setMomoInstructionsOpen] = useState(false);
+  const whatsappOrderUrl = `https://wa.me/250793683432?text=${encodeURIComponent('Hello INSHUTI, I would like to order the Everyday T-Shirt (RWF 12,000).')}`;
+
+  const openOrderModal = () => {
+    setMomoInstructionsOpen(false);
+    setOrderModalOpen(true);
+  };
+
+  const closeOrderModal = () => {
+    setMomoInstructionsOpen(false);
+    setOrderModalOpen(false);
+  };
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setHeroBackgroundIndex((currentIndex) => (currentIndex + 1) % heroBackgrounds.length);
+    }, 4000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    if (!orderModalOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOrderModalOpen(false);
+        setMomoInstructionsOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [orderModalOpen]);
 
   const content = {
     en: {
@@ -218,52 +259,52 @@ export default function LandingPage() {
   const featureCards = [
     {
       icon: ShieldCheck,
-      title: isKinyarwanda ? 'Ibanga n’Umutekano 100%' : '100% Private & Encrypted',
+      title: isKinyarwanda ? '100% Local Handcrafted Quality' : '100% Local Handcrafted Quality',
       text: isKinyarwanda
-        ? 'Amakuru y’ubucuruzi ni ayanyu. Nta muntu utabiherewe ubasha kubona imibare yanyu.'
-        : 'Your numbers belong only to you. Not even system admins see your revenue.',
+        ? 'Sourced and stitched right here in Rwanda with tailored precision.'
+        : 'Sourced and stitched right here in Rwanda with tailored precision.',
     },
     {
       icon: Cloud,
-      title: isKinyarwanda ? 'Ububiko bwo mu Igicu' : 'Disaster-Proof Cloud Backups',
+      title: isKinyarwanda ? 'Affordable Student Pricing' : 'Affordable Student Pricing',
       text: isKinyarwanda
-        ? 'Subirana amakuru yawe kuri telefoni iyo ari yo yose iyo iyawe yatakaye cyangwa yangiritse.'
-        : 'Recover 100% of your records from any phone if yours is lost or damaged.',
+        ? 'Direct-to-consumer prices without middlemen or expensive store markups.'
+        : 'Direct-to-consumer prices without middlemen or expensive store markups.',
     },
     {
       icon: Smartphone,
-      title: isKinyarwanda ? 'Ikora Nta Murandasi' : 'Works Offline & Kinyarwanda UI',
+      title: isKinyarwanda ? 'Easy Ordering via WhatsApp & MoMo' : 'Easy Ordering via WhatsApp & MoMo',
       text: isKinyarwanda
-        ? 'Andika ibyo wagurishije vuba, n’iyo internet idahari. Ntibisaba ubumenyi bwihariye.'
-        : 'Fast, offline-first record entry with zero tech experience needed.',
+        ? 'Order in seconds using local digital payments and quick chat support.'
+        : 'Order in seconds using local digital payments and quick chat support.',
     },
     {
       icon: FileText,
-      title: isKinyarwanda ? 'Raporo za SACCO ako kanya' : 'Instant SACCO Statements',
+      title: isKinyarwanda ? 'Exclusive 1-of-1 Collections' : 'Exclusive 1-of-1 Collections',
       text: isKinyarwanda
-        ? 'Kuramo raporo za PDF zigaragaza amateka y’imari y’ubucuruzi bwawe.'
-        : 'Download automated PDF reports for clear financial proof.',
+        ? 'Unique garments designed so you stand out wherever you go.'
+        : 'Unique garments designed so you stand out wherever you go.',
     },
   ];
 
   const useCases = [
     {
-      title: "Iduka N'Isoko",
-      label: isKinyarwanda ? 'AMADUKA N’AMASOKO' : 'MARKET & RETAIL',
-      text: isKinyarwanda ? 'Andika ibyo wagurishije buri munsi mu masegonda.' : 'Record daily sales in seconds.',
-      image: 'https://images.pexels.com/photos/7947847/pexels-photo-7947847.jpeg?auto=compress&cs=tinysrgb&w=1200',
+      title: 'EVERYDAY ESSENTIALS',
+      label: isKinyarwanda ? 'EVERYDAY WEAR' : 'EVERYDAY WEAR',
+      text: isKinyarwanda ? 'Premium 100% cotton T-shirts tailored for effortless daily style and all-day comfort.' : 'Premium 100% cotton T-shirts tailored for effortless daily style and all-day comfort.',
+      image: '/Gemini_Generated_Image_jkm77kjkm77kjkm7.jpeg',
     },
     {
-      title: 'Ubucuruzi Bwo Muri Quarter',
-      label: isKinyarwanda ? 'UBUCURUZI BUGENDANWA' : 'MOBILE & REMOTE SALES',
-      text: isKinyarwanda ? 'Kurikirana ibirarane by’abakiriya aho uri hose.' : 'Manage customer debts on the go.',
-      image: 'https://images.pexels.com/photos/7821548/pexels-photo-7821548.jpeg?auto=compress&cs=tinysrgb&w=1200',
+      title: 'LIMITED EDITIONS',
+      label: isKinyarwanda ? 'LIMITED DROPS' : 'LIMITED DROPS',
+      text: isKinyarwanda ? 'Exclusive, custom-tailored drops featuring unique modern cuts and sharp fits.' : 'Exclusive, custom-tailored drops featuring unique modern cuts and sharp fits.',
+      image: '/Gemini_Generated_Image_4f10by4f10by4f10.jpeg',
     },
     {
-      title: 'Inguzanyo Muri SACCO',
-      label: isKinyarwanda ? 'SACCO N’AMABANKI' : 'SACCO & BANK LOANS',
-      text: isKinyarwanda ? 'Ohereza amateka asukuye ya PDF usaba inguzanyo.' : 'Export clean PDF history for micro-loans.',
-      image: 'https://images.pexels.com/photos/7821462/pexels-photo-7821462.jpeg?auto=compress&cs=tinysrgb&w=1200',
+      title: 'EXPRESS DELIVERY',
+      label: isKinyarwanda ? 'DIRECT LOCAL COURIER' : 'DIRECT LOCAL COURIER',
+      text: isKinyarwanda ? 'Fast, seamless local door-to-door delivery ordered directly via MoMo.' : 'Fast, seamless local door-to-door delivery ordered directly via MoMo.',
+      image: '/image to use ff59e8d8-fa63-4c0d-bd0e-495a12cd04b6.jpeg',
     },
   ];
 
@@ -276,8 +317,8 @@ export default function LandingPage() {
           </a>
 
           <nav className="hidden items-center gap-8 text-xs font-medium text-slate-600 md:flex">
-            <a href="#use-cases" className="transition hover:text-black">{isKinyarwanda ? 'Ubucuruzi' : 'Use cases'}</a>
-            <a href="#features" className="transition hover:text-black">{isKinyarwanda ? 'Ibyiza' : 'Features'}</a>
+            <a href="#use-cases" className="transition hover:text-black">{isKinyarwanda ? 'Shop' : 'Shop'}</a>
+            <a href="#features" className="transition hover:text-black">{isKinyarwanda ? 'Quality' : 'Quality'}</a>
             <a href="#pricing" className="transition hover:text-black">{isKinyarwanda ? 'Ibiciro' : 'Pricing'}</a>
           </nav>
 
@@ -291,7 +332,7 @@ export default function LandingPage() {
               <span>{isKinyarwanda ? 'English' : 'Kinyarwanda'}</span>
             </button>
             <a href="/signup" className="inline-flex h-10 items-center rounded-full bg-slate-900 px-5 text-xs font-bold text-white transition hover:bg-black">
-              {isKinyarwanda ? 'Tangira' : 'Get Started'}
+              {isKinyarwanda ? 'Shop Apparel' : 'Shop Apparel'}
             </a>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -304,8 +345,8 @@ export default function LandingPage() {
         </div>
         {mobileMenuOpen && (
           <nav className="grid gap-1 border-t border-gray-200 bg-white px-5 py-4 text-sm text-slate-700 md:hidden">
-            <a href="#use-cases" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">{isKinyarwanda ? 'Ubucuruzi' : 'Use cases'}</a>
-            <a href="#features" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">{isKinyarwanda ? 'Ibyiza' : 'Features'}</a>
+            <a href="#use-cases" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">{isKinyarwanda ? 'Shop' : 'Shop'}</a>
+            <a href="#features" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">{isKinyarwanda ? 'Quality' : 'Quality'}</a>
             <a href="#reviews" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">{isKinyarwanda ? 'Abakiriya' : 'Reviews'}</a>
             <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">{isKinyarwanda ? 'Ibiciro' : 'Pricing'}</a>
           </nav>
@@ -313,85 +354,91 @@ export default function LandingPage() {
       </header>
 
       <main className="pt-[72px]">
-        <section id="top" className="relative flex min-h-[calc(100svh-72px)] items-center justify-center overflow-hidden bg-gray-100">
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 bg-fixed bg-cover"
-            style={{
-              backgroundImage: "url('/watermarked_img_17470589643741036743.jpg')",
-              backgroundPosition: 'center 72px',
-            }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/80 to-white/60" />
-          <div className="pointer-events-none absolute inset-0 opacity-[0.13]" aria-hidden="true">
+        <section id="top" className="relative flex min-h-[calc(100svh-72px)] items-center justify-center overflow-hidden border-b border-gray-200 bg-gray-100">
+          <div aria-hidden="true" className="absolute inset-0">
+            {heroBackgrounds.map((image, index) => (
+              <div
+                key={image}
+                className={`absolute inset-0 bg-fixed bg-cover bg-center transition-opacity duration-1000 ease-in-out ${index === heroBackgroundIndex ? 'opacity-100' : 'opacity-0'}`}
+                style={{
+                  backgroundImage: `url('${image}')`,
+                  backgroundPosition: 'center 72px',
+                }}
+              />
+            ))}
+          </div>
+          <div className="pointer-events-none absolute inset-0 opacity-[0.16]" aria-hidden="true">
             <svg className="h-full w-full" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" fill="none">
               <path d="M-80 260C180 90 330 420 590 250S980 100 1220 250s300 210 430 60M-100 330C160 160 340 490 600 320s390-150 630 0 300 210 430 60M-120 400C140 230 350 560 610 390s390-150 630 0 300 210 430 60M-140 470C120 300 360 630 620 460s390-150 630 0 300 210 430 60M-160 540C100 370 370 700 630 530s390-150 630 0 300 210 430 60" stroke="#0f172a" strokeOpacity=".18" />
             </svg>
           </div>
+          <div aria-hidden="true" className="absolute right-6 top-1/2 z-10 hidden -translate-y-1/2 xl:block">
+            <img src="/tshirt.png" alt="" width="512" height="512" className="animate-float h-36 w-36 rounded-2xl object-cover drop-shadow-2xl" />
+          </div>
 
           <div className="relative mx-auto w-full max-w-6xl px-5 py-20 text-center sm:px-8 sm:py-28">
             <div className="mx-auto max-w-4xl">
-              <p className="mb-6 text-[10px] font-bold uppercase tracking-[0.28em] text-slate-600 sm:text-xs">
-                {isKinyarwanda ? 'UBUCURUZI BWAWE, BUHORA BUTONZE' : 'BUSINESS RECORDS, MADE SIMPLE'}
+              <p className="mb-6 text-[10px] font-bold uppercase tracking-[0.28em] text-white drop-shadow-lg sm:text-xs">
+                {isKinyarwanda ? 'INSHUTI' : 'INSHUTI'}
               </p>
-              <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight text-slate-900 sm:text-6xl lg:text-7xl">
-                {isKinyarwanda ? 'Ibitabo by’ubucuruzi bwanyu mu mutekano' : 'Secure, Simple Business Records for Rwandan Merchants'}
-              </h1>
-              <p className="mx-auto mt-5 max-w-2xl text-lg font-medium text-slate-700 sm:text-2xl">
-                {isKinyarwanda ? 'Secure, simple records for Rwandan merchants' : "Ibitabo by'ubucuruzi bwanyu mu mutekano"}
+              <p className="mx-auto mt-24 max-w-2xl text-lg font-medium text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] sm:text-2xl">
+                {isKinyarwanda ? 'Affordable T-Shirts & Apparel. Trusted Quality.' : 'Affordable T-Shirts & Apparel. Trusted Quality.'}
               </p>
-              <p className="mx-auto mt-5 max-w-xl text-sm leading-7 text-slate-600 sm:text-base">
+              <p className="mx-auto mt-12 max-w-xl text-sm leading-7 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] sm:text-base">
                 {isKinyarwanda
-                  ? "Inshuti ibika amateka y'ibyo wagurishije, ibirarane n'amakuru y'abakiriya mu mutekano."
-                  : 'Never lose your sales history, debts, or customer bookings again. Inshuti keeps your business safe and ready for growth.'}
+                  ? 'A stylish, digital Rwanda for everyone.'
+                  : 'A stylish, digital Rwanda for everyone.'}
               </p>
 
-              <div className="mx-auto mt-9 flex max-w-md flex-col justify-center gap-3 sm:flex-row">
-                <a href="/signup" className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-slate-900 px-7 text-sm font-bold text-white transition hover:bg-black">
-                  {isKinyarwanda ? 'Tangira ku Buntu' : 'Get Started Free'}
+              <div className="mx-auto mt-12 flex max-w-md flex-col justify-center gap-3 sm:flex-row">
+                <button type="button" onClick={openOrderModal} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-slate-900 px-7 text-sm font-bold text-white transition hover:bg-black">
+                  {isKinyarwanda ? 'Explore Drops' : 'Explore Drops'}
                   <ArrowRight className="h-4 w-4" />
-                </a>
+                </button>
                 <a href="#phone-preview" className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-slate-300 bg-white/80 px-7 text-sm font-semibold text-slate-800 backdrop-blur transition hover:bg-gray-100">
                   <Play className="h-4 w-4 fill-current" />
-                  {isKinyarwanda ? 'Reba uko bikora' : 'Watch 1-Min Demo'}
+                  {isKinyarwanda ? 'Watch Brand Story' : 'Watch Brand Story'}
                 </a>
               </div>
             </div>
 
-            <div className="mx-auto mt-14 max-w-md rounded-2xl border border-gray-200 bg-white/90 p-6 text-left shadow-[0_24px_100px_rgba(15,23,42,0.12)] backdrop-blur-md sm:mt-16 sm:p-8">
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">
-                {isKinyarwanda ? 'SERIVISI ITANGIRA KURI' : 'SERVICE STARTING AT'}
-              </p>
-              <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">RWF 1,000 <span className="text-base font-normal text-slate-500">/ mo</span></p>
-              <p className="mt-2 text-sm text-slate-600">
-                {isKinyarwanda ? 'Igerageze ku buntu mu minsi 30.' : 'Free 30-day trial for all new Rwandan vendors.'}
-              </p>
-              <a href="/signup" className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white transition hover:bg-black">
-                {isKinyarwanda ? 'Tangira' : 'Get Started'}
-              </a>
-            </div>
           </div>
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-b from-transparent to-white" />
+        </section>
+
+        <section id="craft-story" className="bg-white py-16 sm:py-20">
+          <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 sm:px-8 lg:grid-cols-2 lg:gap-16">
+            <div className="max-w-xl">
+              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">INSHUTI</p>
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Our Story &amp; Craft</h2>
+              <p className="mt-5 text-base leading-7 text-slate-600">Every INSHUTI garment is designed and stitched right here in Rwanda by skilled local tailors. We combine modern urban fits with affordable pricing so everyone can wear Rwandan pride every day.</p>
+            </div>
+            <div
+              role="img"
+              aria-label="A tailor guiding fabric through a sewing machine"
+              className="aspect-[4/3] overflow-hidden rounded-2xl border border-gray-200 bg-gray-100 bg-cover bg-center"
+              style={{ backgroundImage: "url('/tailor%20at%20work.png')" }}
+            />
+          </div>
         </section>
 
         <section id="phone-preview" className="relative overflow-hidden bg-white py-20 sm:py-28">
-          <div className="pointer-events-none absolute inset-0 opacity-[0.1]" aria-hidden="true">
+          <div className="pointer-events-none absolute inset-0 opacity-[0.16]" aria-hidden="true">
             <svg className="h-full w-full" viewBox="0 0 1440 700" preserveAspectRatio="xMidYMid slice" fill="none">
               <path d="M-100 180C160 20 330 320 590 160s390-120 630 20 300 180 430 40M-120 250C140 90 340 390 600 230s390-120 630 20 300 180 430 40M-140 320C120 160 350 460 610 300s390-120 630 20 300 180 430 40M-160 390C100 230 360 530 620 370s390-120 630 20 300 180 430 40" stroke="#0f172a" strokeOpacity=".22" />
             </svg>
           </div>
           <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 sm:px-8 lg:grid-cols-[1fr_0.8fr] lg:gap-20">
             <div className="max-w-xl">
-              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">{isKinyarwanda ? 'YOROSHYE GUKORESHA' : 'BUILT FOR EVERYDAY BUSINESS'}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">{isKinyarwanda ? 'MADE FOR EVERYDAY STYLE' : 'MADE FOR EVERYDAY STYLE'}</p>
               <h2 className="mt-5 text-3xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-5xl">
-                {isKinyarwanda ? 'Andika buri munsi. Menya aho uhagaze.' : 'Your whole business day, in your pocket.'}
+                {isKinyarwanda ? 'Your whole wardrobe upgrade, right in your pocket.' : 'Your whole wardrobe upgrade, right in your pocket.'}
               </h2>
               <p className="mt-5 max-w-lg text-base leading-7 text-slate-600">
-                {isKinyarwanda ? 'Injiza amafaranga winjije n’ibirarane mu buryo bworoshye, mu rurimi wumva.' : 'A clear daily record, designed for busy shops, market stalls, and independent sellers.'}
+                {isKinyarwanda ? 'Designed for students, creators, and everyday trendsetters.' : 'Designed for students, creators, and everyday trendsetters.'}
               </p>
               <div className="mt-8 flex items-center gap-3 text-sm text-slate-700">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"><Lock className="h-4 w-4" /></span>
-                {isKinyarwanda ? 'Amakuru yawe arinzwe kandi ni ayawe' : 'Private records. Yours to keep.'}
+                {isKinyarwanda ? 'Locally crafted. Ready for everyday wear.' : 'Locally crafted. Ready for everyday wear.'}
               </div>
             </div>
 
@@ -402,45 +449,7 @@ export default function LandingPage() {
               transition={{ duration: 0.8, ease: 'easeOut' }}
               className="relative mx-auto w-full max-w-[300px] sm:max-w-[330px]"
             >
-              <div className="absolute -inset-8 rounded-[60px] bg-slate-200/60 blur-3xl" />
-              <div className="relative rounded-[42px] border border-white bg-gradient-to-br from-gray-200 via-gray-400 to-gray-600 p-[7px] shadow-[0_35px_100px_rgba(15,23,42,0.22)]">
-                <div className="relative overflow-hidden rounded-[36px] border border-gray-300 bg-[#f7f8f6] text-neutral-900">
-                  <div className="absolute left-1/2 top-2 z-10 h-5 w-24 -translate-x-1/2 rounded-full bg-black" />
-                  <div className="flex items-center justify-between px-5 pb-3 pt-10 text-[10px] font-semibold text-neutral-500">
-                    <span>9:41</span><span>INSHUTI</span><span>● ● ●</span>
-                  </div>
-                  <div className="bg-white px-5 pb-6 pt-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] font-medium uppercase tracking-widest text-neutral-400">{isKinyarwanda ? 'IGIHEMBWE' : 'TUESDAY, OCT 14'}</p>
-                        <h3 className="mt-1 text-lg font-bold">{isKinyarwanda ? 'Amasahani y’Uyu Munsi' : "Today's Records"}</h3>
-                      </div>
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-700"><CheckCircle2 className="h-4 w-4" /></div>
-                    </div>
-                    <div className="mt-5 rounded-2xl bg-gray-100 p-4 text-slate-900">
-                      <p className="text-[10px] font-medium uppercase tracking-widest text-slate-500">{isKinyarwanda ? 'AYO WINJIZEMO' : 'TODAY\'S SALES'}</p>
-                      <p className="mt-2 text-2xl font-semibold">RWF 84,500</p>
-                      <div className="mt-3 flex items-center gap-2 text-[10px] text-emerald-700"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> {isKinyarwanda ? 'Kuzamuka uyu munsi' : 'Updated just now'}</div>
-                    </div>
-                    <div className="mt-4 space-y-3">
-                      <div className="rounded-xl border border-neutral-200 p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">{isKinyarwanda ? 'AMAFARANGA WINJIJE' : 'DAILY SALES'}</p>
-                        <p className="mt-1 text-sm font-semibold">RWF 84,500</p>
-                      </div>
-                      <div className="rounded-xl border border-neutral-200 p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">{isKinyarwanda ? 'IBIRARANE' : 'CUSTOMER DEBTS'}</p>
-                        <p className="mt-1 text-sm font-semibold">RWF 12,000 <span className="ml-1 text-xs font-normal text-neutral-400">· 3 {isKinyarwanda ? 'abakiriya' : 'customers'}</span></p>
-                      </div>
-                    </div>
-                    <button className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-slate-900 text-sm font-bold text-white transition hover:bg-black">
-                      + {isKinyarwanda ? 'Bika Muri Sisitemu' : 'Save Record'}
-                    </button>
-                    <div className="mt-5 flex justify-around border-t border-neutral-100 pt-4 text-[9px] font-medium text-neutral-400">
-                      <span>⌂ {isKinyarwanda ? 'Ahabanza' : 'Home'}</span><span>＋ {isKinyarwanda ? 'Andika' : 'Record'}</span><span>▤ {isKinyarwanda ? 'Raporo' : 'Reports'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <img src="/good_t-shirt-removebg-preview.png" alt="INSHUTI T-shirt" className="animate-float-shirt h-auto w-full object-contain drop-shadow-2xl" />
             </motion.div>
           </div>
         </section>
@@ -449,10 +458,10 @@ export default function LandingPage() {
           <div className="mx-auto max-w-7xl px-5 sm:px-8">
             <div className="mb-10 flex flex-col justify-between gap-4 sm:mb-12 sm:flex-row sm:items-end">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">{isKinyarwanda ? 'KU BUCURUZI BWAWE' : 'MADE FOR YOUR KIND OF BUSINESS'}</p>
-                <h2 className="mt-4 max-w-2xl text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">{isKinyarwanda ? 'Buri munsi w’ubucuruzi uroroshye.' : 'Small business. Serious records.'}</h2>
+                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">{isKinyarwanda ? 'EVERYDAY STYLE' : 'EVERYDAY STYLE'}</p>
+                <h2 className="mt-4 max-w-2xl text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">{isKinyarwanda ? 'Explore the collection.' : 'Explore the collection.'}</h2>
               </div>
-              <p className="max-w-sm text-sm leading-6 text-slate-600">{isKinyarwanda ? 'Inshuti ikorana n’uburyo bwinshi bwo gucuruza.' : 'From the market stall to a growing neighborhood shop, keep every detail together.'}</p>
+              <p className="max-w-sm text-sm leading-6 text-slate-600">{isKinyarwanda ? 'Everyday essentials and standout limited drops, delivered locally.' : 'Everyday essentials and standout limited drops, delivered locally.'}</p>
             </div>
             <div className="grid gap-4 md:grid-cols-3">
               {useCases.map((item) => (
@@ -471,16 +480,16 @@ export default function LandingPage() {
         </section>
 
         <section id="features" className="relative border-y border-gray-200 bg-white py-20 sm:py-28">
-          <div className="pointer-events-none absolute inset-0 opacity-[0.09]" aria-hidden="true">
+          <div className="pointer-events-none absolute inset-0 opacity-[0.16]" aria-hidden="true">
             <svg className="h-full w-full" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" fill="none">
               <path d="M-100 200C150 20 360 360 610 190s380-110 620 20 300 180 430 30M-120 270C130 90 370 430 620 260s380-110 620 20 300 180 430 30M-140 340C110 160 380 500 630 330s380-110 620 20 300 180 430 30M-160 410C90 230 390 570 640 400s380-110 620 20 300 180 430 30" stroke="#0f172a" strokeOpacity=".18" />
             </svg>
           </div>
           <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
             <div className="mx-auto mb-12 max-w-3xl text-center">
-              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">{isKinyarwanda ? 'BYAKOREWE ABACURUZI' : 'WHY INSHUTI'}</p>
-              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">{isKinyarwanda ? 'Umutekano uhereye ku nyandiko ya mbere.' : 'The details that keep business moving.'}</h2>
-              <p className="mt-4 text-sm leading-6 text-slate-600 sm:text-base">{isKinyarwanda ? 'Ibikoresho byoroshye bifasha ubucuruzi bwawe gukura.' : 'Everything you need to stay organized, protected, and ready for what comes next.'}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">{isKinyarwanda ? 'WHY INSHUTI' : 'WHY INSHUTI'}</p>
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">{isKinyarwanda ? 'The details that make INSHUTI special.' : 'The details that make INSHUTI special.'}</h2>
+              <p className="mt-4 text-sm leading-6 text-slate-600 sm:text-base">{isKinyarwanda ? 'Thoughtful fabrics, fair pricing, and unique local designs for everyday wear.' : 'Thoughtful fabrics, fair pricing, and unique local designs for everyday wear.'}</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {featureCards.map(({ icon: Icon, title, text }, index) => (
@@ -503,11 +512,11 @@ export default function LandingPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <article className="rounded-2xl border border-slate-200 bg-gray-50 p-7 shadow-sm sm:p-9">
                 <h3 className="text-xl font-semibold text-slate-900">Our Mission</h3>
-                <p className="mt-4 text-sm leading-7 text-slate-600 sm:text-base">To accelerate business transformation across Rwanda by equipping merchants and micro-entrepreneurs with intuitive, digital record-keeping tools. Aligned with national economic development policies, we aim to bridge the financial literacy gap and ensure every Rwandan seller can build a verifiable, sustainable financial record.</p>
+                <p className="mt-4 text-sm leading-7 text-slate-600 sm:text-base">To make high-quality apparel affordable and accessible by connecting Rwanda’s buyers and local makers through trusted, transparent technology. We empower local craftsmanship with simplicity, fairness, and confidence.</p>
               </article>
               <article className="rounded-2xl border border-slate-200 bg-gray-50 p-7 shadow-sm sm:p-9">
                 <h3 className="text-xl font-semibold text-slate-900">Our Vision</h3>
-                <p className="mt-4 text-sm leading-7 text-slate-600 sm:text-base">To drive Rwanda’s vision of a cashless, financially inclusive economy where local businesses thrive through digital innovation, stronger financial literacy, and seamless access to institutional capital.</p>
+                <p className="mt-4 text-sm leading-7 text-slate-600 sm:text-base">To build a Rwanda where local apparel and craftsmanship are accessible to everyone. We envision a future where locally made fashion helps people express themselves with confidence and pride.</p>
               </article>
             </div>
           </div>
@@ -528,9 +537,9 @@ export default function LandingPage() {
               </article>
               <article className="flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-sm sm:p-9">
                 <div className="h-32 w-32 overflow-hidden rounded-full border-4 border-white shadow-md ring-1 ring-slate-200">
-                  <TeamAvatar variant="mugisha" name="Mugisha Manzi" />
+                  <img src="/cartoon_woman_avatar.svg" alt="Illustrated avatar of Nduwamariya Therese" className="h-full w-full object-cover" />
                 </div>
-                <h3 className="mt-6 text-xl font-semibold text-slate-900">Mugisha Manzi</h3>
+                <h3 className="mt-6 text-xl font-semibold text-slate-900">Nduwamariya Therese</h3>
                 <p className="mt-2 text-sm text-slate-600">Co-Founder &amp; CTO</p>
               </article>
             </div>
@@ -540,19 +549,19 @@ export default function LandingPage() {
         <section id="reviews" className="bg-gray-50 py-20 sm:py-28">
           <div className="mx-auto max-w-6xl px-5 sm:px-8">
             <div className="mb-10 max-w-2xl">
-              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">{isKinyarwanda ? 'INKURU Z’ABACURUZI' : 'FROM THE PEOPLE WHO USE IT'}</p>
-              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">{isKinyarwanda ? 'Ubucuruzi bwiza butangirana no kumenya neza.' : 'Confidence, built one record at a time.'}</h2>
+              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">{isKinyarwanda ? 'FROM THE PEOPLE WHO WEAR IT' : 'FROM THE PEOPLE WHO WEAR IT'}</p>
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">{isKinyarwanda ? 'Confidence, worn every day.' : 'Confidence, worn every day.'}</h2>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <figure className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
                 <div className="mb-7 flex gap-1 text-slate-900" aria-label="5 out of 5 stars">{Array.from({ length: 5 }, (_, i) => <span key={i}>★</span>)}</div>
-                <blockquote className="text-xl font-medium leading-relaxed text-slate-900 sm:text-2xl">“Inshuti helped me keep track of 150,000 RWF in ibirarane that I usually forgot to collect!”</blockquote>
-                <figcaption className="mt-7 border-t border-slate-200 pt-5 text-sm text-slate-500"><span className="font-semibold text-slate-900">Chantal M.</span><span className="mx-2 text-slate-300">/</span>Nyabugogo Market</figcaption>
+                <blockquote className="text-xl font-medium leading-relaxed text-slate-900 sm:text-2xl">“Inshuti T-shirts are the best quality I’ve bought in Kigali. Super affordable and the fit is perfect!”</blockquote>
+                <figcaption className="mt-7 border-t border-slate-200 pt-5 text-sm text-slate-500"><span className="font-semibold text-slate-900">Chantal M.</span><span className="mx-2 text-slate-300">/</span>UR Gikondo</figcaption>
               </figure>
               <figure className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
                 <div className="mb-7 flex gap-1 text-slate-900" aria-label="5 out of 5 stars">{Array.from({ length: 5 }, (_, i) => <span key={i}>★</span>)}</div>
-                <blockquote className="text-xl font-medium leading-relaxed text-slate-900 sm:text-2xl">“I applied for a SACCO loan using the PDF statements generated directly from my phone.”</blockquote>
-                <figcaption className="mt-7 border-t border-slate-200 pt-5 text-sm text-slate-500"><span className="font-semibold text-slate-900">Jean-Paul K.</span><span className="mx-2 text-slate-300">/</span>Kimironko</figcaption>
+                <blockquote className="text-xl font-medium leading-relaxed text-slate-900 sm:text-2xl">“Ordered two shirts via WhatsApp and they delivered right to my place in Kimironko the same day.”</blockquote>
+                <figcaption className="mt-7 border-t border-slate-200 pt-5 text-sm text-slate-500"><span className="font-semibold text-slate-900">Jean-Paul K.</span><span className="mx-2 text-slate-300">/</span>Kigali</figcaption>
               </figure>
             </div>
           </div>
@@ -562,13 +571,13 @@ export default function LandingPage() {
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(15,23,42,0.06),transparent_55%)]" />
           <div className="relative mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-gray-50 p-7 text-center shadow-[0_30px_100px_rgba(15,23,42,0.08)] sm:p-12">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white"><CheckCircle2 className="h-5 w-5 text-slate-900" /></div>
-            <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">{isKinyarwanda ? 'IGERAGEZA RY’IMINSI 30' : '30-DAY RISK-FREE TRIAL'}</p>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">{isKinyarwanda ? 'Tangira kubika neza uyu munsi.' : 'Start with clarity. Grow with confidence.'}</h2>
-            <p className="mt-5 text-lg text-slate-700">1,000 RWF <span className="text-sm text-slate-500">/ month after trial</span></p>
-            <a href="/signup" className="mt-8 inline-flex min-h-12 w-full max-w-sm items-center justify-center gap-2 rounded-full bg-slate-900 px-7 text-sm font-bold text-white transition hover:bg-black">
-              {isKinyarwanda ? 'Fungura Konti Yawe' : 'Create Your Account Now'} <ArrowRight className="h-4 w-4" />
-            </a>
-            <p className="mt-4 text-xs text-slate-500">{isKinyarwanda ? 'Nta karita ya banki isabwa' : 'No bank card required to start'}</p>
+            <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">{isKinyarwanda ? 'LOCAL QUALITY, EVERYDAY STYLE' : 'LOCAL QUALITY, EVERYDAY STYLE'}</p>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">{isKinyarwanda ? 'Wear confidence. Support local craftsmanship.' : 'Wear confidence. Support local craftsmanship.'}</h2>
+            <p className="mt-5 text-lg text-slate-700">T-SHIRTS FROM RWF 12,000 <span className="text-sm text-slate-500">/ piece</span></p>
+            <button type="button" onClick={openOrderModal} className="mt-8 inline-flex min-h-12 w-full max-w-sm items-center justify-center gap-2 rounded-full bg-slate-900 px-7 text-sm font-bold text-white transition hover:bg-black">
+              {isKinyarwanda ? 'Order Your First Drop Now' : 'Order Your First Drop Now'} <ArrowRight className="h-4 w-4" />
+            </button>
+            <p className="mt-4 text-xs text-slate-500">{isKinyarwanda ? 'Locally made apparel for everyday confidence.' : 'Locally made apparel for everyday confidence.'}</p>
           </div>
         </section>
       </main>
@@ -577,7 +586,7 @@ export default function LandingPage() {
         <div className="mx-auto grid max-w-7xl gap-9 px-5 py-10 sm:px-8 md:grid-cols-[1fr_auto_auto] md:items-center">
           <div>
             <a href="#top" className="text-sm font-black tracking-[0.28em] text-slate-900">INSHUTI</a>
-            <p className="mt-3 max-w-sm text-xs leading-5 text-slate-500">{isKinyarwanda ? 'Ibitabo by’ubucuruzi byoroshye kandi bitekanye ku bacuruzi bo mu Rwanda.' : 'Simple, secure business records for Rwanda’s merchants and micro-entrepreneurs.'}</p>
+            <p className="mt-3 max-w-sm text-xs leading-5 text-slate-500">{isKinyarwanda ? 'Simple, affordable, high-quality fashion for Rwanda’s youth and everyday creators.' : 'Simple, affordable, high-quality fashion for Rwanda’s youth and everyday creators.'}</p>
           </div>
           <nav className="flex flex-wrap gap-x-6 gap-y-3 text-xs text-slate-600">
             <a href="#features" className="hover:text-black">{isKinyarwanda ? 'Ibanga' : 'Privacy Policy'}</a>
@@ -585,7 +594,7 @@ export default function LandingPage() {
             <a href="mailto:support@inshuti.rw" className="hover:text-black">{isKinyarwanda ? 'Ubufasha' : 'Support'}</a>
           </nav>
           <div className="flex flex-col items-start gap-3 md:items-end">
-            <a href="tel:+250781662020" className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 transition hover:text-black"><PhoneCall className="h-4 w-4" /> +250781662020 <span className="text-slate-500">/ MTN MoMo</span></a>
+            <a href="tel:+250793683432" className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 transition hover:text-black"><PhoneCall className="h-4 w-4" /> Emmanuel Niyogakiza · +250793683432 <span className="text-slate-500">/ MTN MoMo</span></a>
             <nav aria-label="Social media links" className="flex items-center gap-2">
               <a href="https://www.linkedin.com/in/emmanuel-niyogakiza-41208a389/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" title="LinkedIn" className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-400 hover:text-slate-900">
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.35V9h3.414v1.561h.049c.476-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 1 1 .001-4.125 2.062 2.062 0 0 1-.001 4.125zM7.114 20.452H3.56V9h3.554v11.452z" /></svg>
@@ -604,6 +613,45 @@ export default function LandingPage() {
         </div>
         <div className="border-t border-gray-200 px-5 py-5 text-center text-[10px] text-slate-500 sm:px-8">© 2026 Inshuti / Ubiko. All rights reserved.</div>
       </footer>
+
+      {orderModalOpen && (
+        <div
+          role="presentation"
+          onClick={closeOrderModal}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-5 backdrop-blur-sm"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="order-modal-title"
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl sm:p-8"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="order-modal-title" className="text-xl font-semibold text-slate-900">Choose how to order</h2>
+                <p className="mt-2 text-sm text-slate-600">Everyday T-Shirt · RWF 12,000</p>
+              </div>
+              <button type="button" onClick={closeOrderModal} aria-label="Close order options" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:bg-gray-100 hover:text-slate-900">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-6 grid gap-3">
+              <a href={whatsappOrderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 items-center justify-center rounded-full bg-slate-900 px-5 text-center text-sm font-bold text-white transition hover:bg-black">
+                Order via WhatsApp (+250793683432)
+              </a>
+              <button type="button" onClick={() => setMomoInstructionsOpen((open) => !open)} aria-expanded={momoInstructionsOpen} aria-controls="momo-instructions" className="inline-flex min-h-12 items-center justify-center rounded-full border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:bg-gray-100">
+                Pay via MTN MoMo
+              </button>
+            </div>
+            {momoInstructionsOpen && (
+              <div id="momo-instructions" className="mt-4 rounded-xl bg-gray-50 p-4 text-sm leading-6 text-slate-600">
+                Dial <strong className="text-slate-900">*182#</strong> on your MTN line, choose <strong className="text-slate-900">Pay merchant</strong>, enter the INSHUTI merchant code, and confirm <strong className="text-slate-900">RWF 12,000</strong>. Ask our team on WhatsApp for the current merchant code before confirming.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
