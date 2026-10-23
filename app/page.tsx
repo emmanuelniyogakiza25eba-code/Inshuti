@@ -63,10 +63,18 @@ const heroBackgrounds = [
   '/Tshirt_img_5248750936257456493.jpg',
 ];
 
+const heroProductImages = [
+  '/Grey%20color%20polo.png',
+  '/T-shirt%20together.png',
+  '/white%20polo%20love.png',
+];
+
 export default function LandingPage() {
   const [lang, setLang] = useState<'en' | 'rw'>('en');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [heroBackgroundIndex, setHeroBackgroundIndex] = useState(0);
+  const [heroProductIndex, setHeroProductIndex] = useState(0);
+  const [heroProductExiting, setHeroProductExiting] = useState(false);
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [momoInstructionsOpen, setMomoInstructionsOpen] = useState(false);
   const whatsappOrderUrl = `https://wa.me/250793683432?text=${encodeURIComponent('Hello INSHUTI, I would like to order the Everyday T-Shirt (RWF 12,000).')}`;
@@ -87,6 +95,22 @@ export default function LandingPage() {
     }, 4000);
 
     return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    let exitTimeoutId: number | undefined;
+    const intervalId = window.setInterval(() => {
+      setHeroProductExiting(true);
+      exitTimeoutId = window.setTimeout(() => {
+        setHeroProductIndex((currentIndex) => (currentIndex + 1) % heroProductImages.length);
+        setHeroProductExiting(false);
+      }, 700);
+    }, 3000);
+
+    return () => {
+      window.clearInterval(intervalId);
+      if (exitTimeoutId !== undefined) window.clearTimeout(exitTimeoutId);
+    };
   }, []);
 
   useEffect(() => {
@@ -354,43 +378,50 @@ export default function LandingPage() {
       </header>
 
       <main className="pt-[72px]">
-        <section id="top" className="relative flex min-h-[calc(100svh-72px)] items-center justify-center overflow-hidden border-b border-gray-200 bg-gray-100">
+        <section id="top" className="relative flex min-h-[calc(100svh-72px)] items-end justify-center overflow-hidden border-b border-gray-200 bg-gray-100 lg:items-center">
           <div aria-hidden="true" className="absolute inset-0">
             {heroBackgrounds.map((image, index) => (
               <div
                 key={image}
-                className={`absolute inset-0 bg-fixed bg-cover bg-center transition-opacity duration-1000 ease-in-out ${index === heroBackgroundIndex ? 'opacity-100' : 'opacity-0'}`}
+                className={`absolute inset-0 bg-[length:auto_58%] bg-top bg-no-repeat transition-opacity duration-1000 ease-in-out lg:bg-[length:auto_100%] lg:bg-right ${index === heroBackgroundIndex ? 'opacity-100' : 'opacity-0'}`}
                 style={{
                   backgroundImage: `url('${image}')`,
-                  backgroundPosition: 'center 72px',
                 }}
               />
             ))}
           </div>
-          <div className="pointer-events-none absolute inset-0 opacity-[0.16]" aria-hidden="true">
+          <div className="pointer-events-none absolute inset-0 opacity-[0.06]" aria-hidden="true">
             <svg className="h-full w-full" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" fill="none">
               <path d="M-80 260C180 90 330 420 590 250S980 100 1220 250s300 210 430 60M-100 330C160 160 340 490 600 320s390-150 630 0 300 210 430 60M-120 400C140 230 350 560 610 390s390-150 630 0 300 210 430 60M-140 470C120 300 360 630 620 460s390-150 630 0 300 210 430 60M-160 540C100 370 370 700 630 530s390-150 630 0 300 210 430 60" stroke="#0f172a" strokeOpacity=".18" />
             </svg>
           </div>
-          <div aria-hidden="true" className="absolute right-6 top-1/2 z-10 hidden -translate-y-1/2 xl:block">
-            <img src="/tshirt.png" alt="" width="512" height="512" className="animate-float h-36 w-36 rounded-2xl object-cover drop-shadow-2xl" />
+          <div aria-hidden="true" className="absolute bottom-6 left-8 z-10 hidden xl:block">
+            <div className="animate-float">
+              <img
+                src={heroProductImages[heroProductIndex]}
+                alt=""
+                width="512"
+                height="512"
+                className={`h-24 w-24 rounded-2xl object-cover drop-shadow-2xl transition-all duration-700 ease-in-out ${heroProductExiting ? 'translate-x-16 opacity-0' : 'translate-x-0 opacity-100'}`}
+              />
+            </div>
           </div>
 
-          <div className="relative mx-auto w-full max-w-6xl px-5 py-20 text-center sm:px-8 sm:py-28">
-            <div className="mx-auto max-w-4xl">
-              <p className="mb-6 text-[10px] font-bold uppercase tracking-[0.28em] text-white drop-shadow-lg sm:text-xs">
+          <div className="relative mx-auto mt-auto w-full max-w-6xl px-5 pb-6 pt-[54svh] text-center sm:px-8 sm:pb-10 lg:my-auto lg:py-20 lg:text-left">
+            <div className="mx-auto max-w-4xl lg:mx-0 lg:max-w-[30rem]">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-slate-700 sm:mb-4 sm:text-xs">
                 {isKinyarwanda ? 'INSHUTI' : 'INSHUTI'}
               </p>
-              <p className="mx-auto mt-24 max-w-2xl text-lg font-medium text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] sm:text-2xl">
+              <p className="mx-auto mt-3 max-w-2xl text-2xl font-semibold text-slate-900 sm:mt-4 sm:text-3xl lg:mx-0">
                 {isKinyarwanda ? 'Affordable T-Shirts & Apparel. Trusted Quality.' : 'Affordable T-Shirts & Apparel. Trusted Quality.'}
               </p>
-              <p className="mx-auto mt-12 max-w-xl text-sm leading-7 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] sm:text-base">
+              <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-700 sm:mt-4 sm:text-base sm:leading-7 lg:mx-0">
                 {isKinyarwanda
                   ? 'A stylish, digital Rwanda for everyone.'
                   : 'A stylish, digital Rwanda for everyone.'}
               </p>
 
-              <div className="mx-auto mt-12 flex max-w-md flex-col justify-center gap-3 sm:flex-row">
+              <div className="mx-auto mt-5 flex max-w-md flex-col justify-center gap-3 sm:mt-6 lg:mx-0 lg:flex-row">
                 <button type="button" onClick={openOrderModal} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-slate-900 px-7 text-sm font-bold text-white transition hover:bg-black">
                   {isKinyarwanda ? 'Explore Drops' : 'Explore Drops'}
                   <ArrowRight className="h-4 w-4" />
@@ -449,7 +480,9 @@ export default function LandingPage() {
               transition={{ duration: 0.8, ease: 'easeOut' }}
               className="relative mx-auto w-full max-w-[300px] sm:max-w-[330px]"
             >
-              <img src="/good_t-shirt-removebg-preview.png" alt="INSHUTI T-shirt" className="animate-float-shirt h-auto w-full object-contain drop-shadow-2xl" />
+              <div className={`transition-all duration-700 ease-in-out ${heroProductExiting ? 'translate-x-16 opacity-0' : 'translate-x-0 opacity-100'}`}>
+                <img src={heroProductImages[heroProductIndex]} alt="INSHUTI T-shirt" className="animate-float-shirt h-auto w-full object-contain drop-shadow-2xl" />
+              </div>
             </motion.div>
           </div>
         </section>
@@ -555,12 +588,12 @@ export default function LandingPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <figure className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
                 <div className="mb-7 flex gap-1 text-slate-900" aria-label="5 out of 5 stars">{Array.from({ length: 5 }, (_, i) => <span key={i}>★</span>)}</div>
-                <blockquote className="text-xl font-medium leading-relaxed text-slate-900 sm:text-2xl">“Inshuti T-shirts are the best quality I’ve bought in Kigali. Super affordable and the fit is perfect!”</blockquote>
-                <figcaption className="mt-7 border-t border-slate-200 pt-5 text-sm text-slate-500"><span className="font-semibold text-slate-900">Chantal M.</span><span className="mx-2 text-slate-300">/</span>UR Gikondo</figcaption>
+                <blockquote className="text-xs font-medium italic leading-relaxed text-slate-900">“Inshuti T-shirts are the best quality I've bought in Kigali. Super affordable, premium cotton fabric, and the fit is perfect for daily wear!”</blockquote>
+                <figcaption className="mt-7 border-t border-slate-200 pt-5 text-sm text-slate-500"><span className="font-semibold text-slate-900">Eric M.</span><span className="mx-2 text-slate-300">/</span>UR Gikondo</figcaption>
               </figure>
               <figure className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
                 <div className="mb-7 flex gap-1 text-slate-900" aria-label="5 out of 5 stars">{Array.from({ length: 5 }, (_, i) => <span key={i}>★</span>)}</div>
-                <blockquote className="text-xl font-medium leading-relaxed text-slate-900 sm:text-2xl">“Ordered two shirts via WhatsApp and they delivered right to my place in Kimironko the same day.”</blockquote>
+                <blockquote className="text-xs font-medium italic leading-relaxed text-slate-900">“Ordered two men's shirts via WhatsApp and they delivered right to my place in Kimironko the same day. Great quality for RWF 12,000.”</blockquote>
                 <figcaption className="mt-7 border-t border-slate-200 pt-5 text-sm text-slate-500"><span className="font-semibold text-slate-900">Jean-Paul K.</span><span className="mx-2 text-slate-300">/</span>Kigali</figcaption>
               </figure>
             </div>
