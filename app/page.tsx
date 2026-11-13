@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   ShieldCheck,
@@ -15,7 +15,12 @@ import {
   Lock,
   ArrowRight,
   PhoneCall,
+  LockKeyhole,
+  Sun,
+  Moon,
 } from 'lucide-react';
+import { recordActivityFriction, recordActivityPage } from '@/src/utils/storeAnalytics';
+import InshutiLogo from '@/src/components/InshutiLogo';
 
 function TeamAvatar({
   variant,
@@ -71,20 +76,52 @@ const heroProductImages = [
 
 export default function LandingPage() {
   const [lang, setLang] = useState<'en' | 'rw'>('en');
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [heroBackgroundIndex, setHeroBackgroundIndex] = useState(0);
   const [heroProductIndex, setHeroProductIndex] = useState(0);
   const [heroProductExiting, setHeroProductExiting] = useState(false);
+  const [heroParallaxOffset, setHeroParallaxOffset] = useState(0);
+  const [heroCenterScale, setHeroCenterScale] = useState(1);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [momoInstructionsOpen, setMomoInstructionsOpen] = useState(false);
+  const orderSubmittedRef = useRef(false);
+  const [shopperName, setShopperName] = useState('');
+
+  useEffect(() => {
+    try {
+      const profile = JSON.parse(window.localStorage.getItem('inshuti-shop-profile') || 'null');
+      if (profile && typeof profile.name === 'string') setShopperName(profile.name.trim());
+    } catch {
+      setShopperName('');
+    }
+  }, []);
+
+  const shopperInitials = shopperName.split(/\s+/).filter(Boolean).length > 1
+    ? `${shopperName.trim().split(/\s+/)[0][0]}${shopperName.trim().split(/\s+/).slice(-1)[0]?.[0] || ''}`.toUpperCase()
+    : shopperName.trim().slice(0, 2).toUpperCase();
   const whatsappOrderUrl = `https://wa.me/250793683432?text=${encodeURIComponent('Hello INSHUTI, I would like to order the Everyday T-Shirt (RWF 12,000).')}`;
 
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem('inshuti-theme');
+    if (savedTheme === 'dark' || savedTheme === 'light') setTheme(savedTheme);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    window.localStorage.setItem('inshuti-theme', theme);
+  }, [theme]);
+
   const openOrderModal = () => {
+    orderSubmittedRef.current = false;
     setMomoInstructionsOpen(false);
     setOrderModalOpen(true);
+    recordActivityPage('Checkout', '/');
   };
 
   const closeOrderModal = () => {
+    if (orderModalOpen && !orderSubmittedRef.current) recordActivityFriction('Checkout', 'Abandoned Checkout');
     setMomoInstructionsOpen(false);
     setOrderModalOpen(false);
   };
@@ -126,6 +163,49 @@ export default function LandingPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [orderModalOpen]);
+
+  useEffect(() => {
+    const revealElements = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal]'));
+    if (!('IntersectionObserver' in window)) {
+      revealElements.forEach((element) => element.classList.add('visible'));
+      return;
+    }
+
+    const observer = new IntersectionObserver((entries, currentObserver) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          currentObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -24px 0px' });
+
+    revealElements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    let frameId = 0;
+    const updateParallax = () => {
+      if (frameId) window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        const offset = Math.max(-18, Math.min(18, window.scrollY * -0.025));
+        const heroHeight = document.getElementById('top')?.offsetHeight ?? window.innerHeight;
+        const scrollProgress = Math.min(1, Math.max(0, window.scrollY / heroHeight));
+        setHeroParallaxOffset(offset);
+          setHeroCenterScale(1 + scrollProgress * 0.35);
+      });
+    };
+
+    updateParallax();
+    window.addEventListener('scroll', updateParallax, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', updateParallax);
+      if (frameId) window.cancelAnimationFrame(frameId);
+    };
+  }, []);
 
   const content = {
     en: {
@@ -332,17 +412,37 @@ export default function LandingPage() {
     },
   ];
 
+  const faqItems = [
+    {
+      question: 'How do I order an INSHUTI T-shirt?',
+      answer: 'Choose Explore Drops or Order Your First Drop Now to see WhatsApp and MTN MoMo checkout options.',
+    },
+    {
+      question: 'How can I pay with MTN MoMo?',
+      answer: 'Dial *182# on your MTN line, choose Pay merchant, and ask our WhatsApp team for the current INSHUTI merchant code before confirming your payment.',
+    },
+    {
+      question: 'What sizes are available?',
+      answer: 'The current Everyday T-Shirt drop lists S, M, and L. Availability may vary by collection.',
+    },
+    {
+      question: 'Where do you deliver?',
+      answer: 'We offer local door-to-door delivery. Message us on WhatsApp to confirm delivery availability for your area.',
+    },
+  ];
+
   return (
-    <div className="min-h-screen overflow-hidden bg-white text-slate-900 antialiased selection:bg-slate-900 selection:text-white">
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-gray-200 bg-white/95 backdrop-blur-md">
-        <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8">
-          <a href="#top" className="text-sm font-black tracking-[0.28em] text-slate-900 sm:text-base">
-            INSHUTI
+    <div className="min-h-screen overflow-x-clip bg-white text-slate-900 antialiased selection:bg-slate-900 selection:text-white">
+      <header className="sticky top-0 z-[1000] border-b border-gray-200 bg-white/95 backdrop-blur-md">
+        <div className="relative mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8">
+          <a href="#top" aria-label="INSHUTI store home" className="inline-flex items-center">
+            <InshutiLogo variant="light" />
           </a>
 
-          <nav className="hidden items-center gap-8 text-xs font-medium text-slate-600 md:flex">
-            <a href="#use-cases" className="transition hover:text-black">{isKinyarwanda ? 'Shop' : 'Shop'}</a>
+          <nav className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-8 text-xs font-medium text-slate-600 lg:flex">
+            <a href="/shop" className="font-semibold transition hover:text-black">Explore Store →</a>
             <a href="#features" className="transition hover:text-black">{isKinyarwanda ? 'Quality' : 'Quality'}</a>
+            <a href="#faq" className="transition hover:text-black">FAQ</a>
             <a href="#pricing" className="transition hover:text-black">{isKinyarwanda ? 'Ibiciro' : 'Pricing'}</a>
           </nav>
 
@@ -353,32 +453,51 @@ export default function LandingPage() {
               className="inline-flex h-10 items-center gap-2 rounded-full px-3 text-xs font-semibold text-slate-600 transition hover:bg-gray-100 hover:text-black"
             >
               <Globe className="h-4 w-4" />
-              <span>{isKinyarwanda ? 'English' : 'Kinyarwanda'}</span>
+              <span className="hidden sm:inline">{isKinyarwanda ? 'English' : 'Kinyarwanda'}</span>
             </button>
-            <a href="/signup" className="inline-flex h-10 items-center rounded-full bg-slate-900 px-5 text-xs font-bold text-white transition hover:bg-black">
-              {isKinyarwanda ? 'Shop Apparel' : 'Shop Apparel'}
-            </a>
+            <button
+              type="button"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-600 transition hover:bg-gray-100 hover:text-black"
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            {shopperName ? (
+              <a href="/shop" aria-label={`Signed in as ${shopperName}`} className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-2.5 text-xs font-semibold text-slate-800 transition hover:bg-gray-100">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">{shopperInitials}</span>
+                <span className="hidden max-w-24 truncate sm:inline">{shopperName.split(/\s+/)[0]}</span>
+              </a>
+            ) : (
+              <div className="hidden items-center gap-1 sm:flex">
+                <a href="/shop?signin=1" className="inline-flex h-10 items-center rounded-full px-3 text-xs font-semibold text-slate-700 transition hover:bg-gray-100">Sign In</a>
+                <a href="/shop?signin=1" className="inline-flex h-10 items-center rounded-full bg-slate-900 px-4 text-xs font-bold text-white transition hover:bg-black">Sign Up</a>
+              </div>
+            )}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-slate-700 md:hidden"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-slate-700 lg:hidden"
             >
               {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             </button>
           </div>
         </div>
         {mobileMenuOpen && (
-          <nav className="grid gap-1 border-t border-gray-200 bg-white px-5 py-4 text-sm text-slate-700 md:hidden">
-            <a href="#use-cases" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">{isKinyarwanda ? 'Shop' : 'Shop'}</a>
+          <nav className="grid gap-1 border-t border-gray-200 bg-white px-5 py-4 text-sm text-slate-700 lg:hidden">
+            <a href="/shop" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 font-semibold hover:bg-gray-100">Explore Store →</a>
+            {!shopperName && <a href="/shop?signin=1" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">Sign In / Sign Up</a>}
             <a href="#features" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">{isKinyarwanda ? 'Quality' : 'Quality'}</a>
+            <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">FAQ</a>
             <a href="#reviews" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">{isKinyarwanda ? 'Abakiriya' : 'Reviews'}</a>
             <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">{isKinyarwanda ? 'Ibiciro' : 'Pricing'}</a>
           </nav>
         )}
       </header>
 
-      <main className="pt-[72px]">
-        <section id="top" className="relative flex min-h-[calc(100svh-72px)] items-end justify-center overflow-hidden border-b border-gray-200 bg-gray-100 lg:items-center">
+      <main>
+        <section id="top" className="relative flex min-h-[calc(100svh-72px)] flex-col items-center justify-start overflow-hidden border-b border-gray-200 bg-gray-100">
           <div aria-hidden="true" className="absolute inset-0">
             {heroBackgrounds.map((image, index) => (
               <div
@@ -390,53 +509,82 @@ export default function LandingPage() {
               />
             ))}
           </div>
+          <div aria-label="INSHUTI brand highlights" className="relative z-20 w-full overflow-hidden border-b border-white/10 bg-slate-900 px-4 py-2.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-white sm:text-[10px]">
+            <div className="brand-ticker-track">
+              <div className="brand-ticker-content" aria-label="INSHUTI, Made in Rwanda, 100% Cotton, Local Craft">
+                {Array.from({ length: 8 }, (_, index) => (
+                  <React.Fragment key={index}>
+                    <span>INSHUTI</span><span aria-hidden="true">✳</span>
+                    <span>Made in Rwanda</span><span aria-hidden="true">✳</span>
+                    <span>100% Cotton</span><span aria-hidden="true">✳</span>
+                    <span>Local Craft</span><span aria-hidden="true">✳</span>
+                  </React.Fragment>
+                ))}
+              </div>
+              <div className="brand-ticker-content" aria-hidden="true">
+                {Array.from({ length: 8 }, (_, index) => (
+                  <React.Fragment key={index}>
+                    <span>INSHUTI</span><span>✳</span>
+                    <span>Made in Rwanda</span><span>✳</span>
+                    <span>100% Cotton</span><span>✳</span>
+                    <span>Local Craft</span><span>✳</span>
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          </div>
           <div className="pointer-events-none absolute inset-0 opacity-[0.06]" aria-hidden="true">
             <svg className="h-full w-full" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" fill="none">
               <path d="M-80 260C180 90 330 420 590 250S980 100 1220 250s300 210 430 60M-100 330C160 160 340 490 600 320s390-150 630 0 300 210 430 60M-120 400C140 230 350 560 610 390s390-150 630 0 300 210 430 60M-140 470C120 300 360 630 620 460s390-150 630 0 300 210 430 60M-160 540C100 370 370 700 630 530s390-150 630 0 300 210 430 60" stroke="#0f172a" strokeOpacity=".18" />
             </svg>
           </div>
-          <div aria-hidden="true" className="absolute bottom-6 left-8 z-10 hidden xl:block">
-            <div className="animate-float">
-              <img
-                src={heroProductImages[heroProductIndex]}
-                alt=""
-                width="512"
-                height="512"
-                className={`h-24 w-24 rounded-2xl object-cover drop-shadow-2xl transition-all duration-700 ease-in-out ${heroProductExiting ? 'translate-x-16 opacity-0' : 'translate-x-0 opacity-100'}`}
-              />
-            </div>
-          </div>
-
-          <div className="relative mx-auto mt-auto w-full max-w-6xl px-5 pb-6 pt-[54svh] text-center sm:px-8 sm:pb-10 lg:my-auto lg:py-20 lg:text-left">
-            <div className="mx-auto max-w-4xl lg:mx-0 lg:max-w-[30rem]">
+          <div className="relative mx-auto flex w-full max-w-7xl flex-col items-center px-5 pb-10 pt-10 text-center sm:px-8 sm:pt-12">
+            <div data-reveal className="mx-auto max-w-4xl">
               <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-slate-700 sm:mb-4 sm:text-xs">
                 {isKinyarwanda ? 'INSHUTI' : 'INSHUTI'}
               </p>
-              <p className="mx-auto mt-3 max-w-2xl text-2xl font-semibold text-slate-900 sm:mt-4 sm:text-3xl lg:mx-0">
-                {isKinyarwanda ? 'Affordable T-Shirts & Apparel. Trusted Quality.' : 'Affordable T-Shirts & Apparel. Trusted Quality.'}
-              </p>
-              <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-700 sm:mt-4 sm:text-base sm:leading-7 lg:mx-0">
-                {isKinyarwanda
-                  ? 'A stylish, digital Rwanda for everyone.'
-                  : 'A stylish, digital Rwanda for everyone.'}
-              </p>
-
-              <div className="mx-auto mt-5 flex max-w-md flex-col justify-center gap-3 sm:mt-6 lg:mx-0 lg:flex-row">
-                <button type="button" onClick={openOrderModal} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-slate-900 px-7 text-sm font-bold text-white transition hover:bg-black">
-                  {isKinyarwanda ? 'Explore Drops' : 'Explore Drops'}
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-                <a href="#phone-preview" className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-slate-300 bg-white/80 px-7 text-sm font-semibold text-slate-800 backdrop-blur transition hover:bg-gray-100">
-                  <Play className="h-4 w-4 fill-current" />
-                  {isKinyarwanda ? 'Watch Brand Story' : 'Watch Brand Story'}
-                </a>
-              </div>
             </div>
 
+            <div aria-label="INSHUTI apparel collection" className="relative mx-auto mt-12 h-[15rem] w-full max-w-5xl sm:mt-16 sm:h-[19rem] lg:mt-20 lg:h-[22rem]" style={{ perspective: '1400px' }}>
+              {heroProductImages.map((image, index) => {
+                const cardPlacement = index === 1
+                    ? 'left-1/2 top-1/2 z-20 w-[46%] max-w-[300px] -translate-x-1/2 -translate-y-1/2 scale-[1.08]'
+                  : index === 0
+                    ? 'left-[7%] top-1/2 z-10 w-[36%] max-w-[260px] -translate-y-1/2 -rotate-6 sm:left-1/2 sm:w-[34%] sm:-translate-x-[132%]'
+                    : 'right-[7%] top-1/2 z-10 w-[36%] max-w-[260px] -translate-y-1/2 rotate-6 sm:left-1/2 sm:right-auto sm:w-[34%] sm:translate-x-[32%]';
+                const parallaxFactor = index === 1 ? 1 : index === 0 ? -0.5 : 0.5;
+
+                return (
+                  <figure
+                    key={image}
+                    className={`absolute aspect-[4/5] overflow-hidden rounded-2xl border border-white/80 bg-white p-2 shadow-xl transition-[scale,box-shadow] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] sm:p-3 ${index === 1 ? 'will-change-transform' : ''} ${cardPlacement}`}
+                    style={index === 1 ? {
+                      scale: heroCenterScale,
+                      willChange: 'transform, scale',
+                      transformStyle: 'preserve-3d',
+                      boxShadow: `0 18px ${40 + (heroCenterScale - 1) * 80}px rgba(15, 23, 42, ${0.18 + (heroCenterScale - 1) * 0.25})`,
+                    } : undefined}
+                  >
+                    <div className={`h-full w-full transition-transform duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] ${index === 1 ? 'will-change-transform' : ''}`} style={{ transform: `translateY(${heroParallaxOffset * parallaxFactor}px) rotateX(${index === 1 ? (1.35 - heroCenterScale) * 3 : 0}deg)` }}>
+                      <img src={image} alt={`INSHUTI garment ${index + 1}`} className="h-full w-full object-contain" />
+                    </div>
+                  </figure>
+                );
+              })}
+            </div>
+            <div className="relative z-30 mt-7 flex flex-col items-center gap-4">
+              <a href="/shop" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-slate-900 px-7 text-sm font-bold text-white shadow-lg transition hover:bg-black">
+                Explore the Store <ArrowRight className="h-4 w-4" />
+              </a>
+              <div className="flex items-center gap-5 text-xs font-semibold text-slate-800">
+                <a href="/shop?department=WOMEN" className="underline decoration-slate-400 underline-offset-4 transition hover:text-black">Shop Women →</a>
+                <a href="/shop?department=MEN" className="underline decoration-slate-400 underline-offset-4 transition hover:text-black">Shop Men →</a>
+              </div>
+            </div>
           </div>
         </section>
 
-        <section id="craft-story" className="bg-white py-16 sm:py-20">
+        <section id="craft-story" data-reveal className="bg-white py-16 sm:py-20">
           <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 sm:px-8 lg:grid-cols-2 lg:gap-16">
             <div className="max-w-xl">
               <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">INSHUTI</p>
@@ -452,7 +600,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="phone-preview" className="relative overflow-hidden bg-white py-20 sm:py-28">
+        <section id="phone-preview" data-reveal className="relative overflow-hidden bg-white py-20 sm:py-28">
           <div className="pointer-events-none absolute inset-0 opacity-[0.16]" aria-hidden="true">
             <svg className="h-full w-full" viewBox="0 0 1440 700" preserveAspectRatio="xMidYMid slice" fill="none">
               <path d="M-100 180C160 20 330 320 590 160s390-120 630 20 300 180 430 40M-120 250C140 90 340 390 600 230s390-120 630 20 300 180 430 40M-140 320C120 160 350 460 610 300s390-120 630 20 300 180 430 40M-160 390C100 230 360 530 620 370s390-120 630 20 300 180 430 40" stroke="#0f172a" strokeOpacity=".22" />
@@ -487,7 +635,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="use-cases" className="bg-gray-50 py-16 sm:py-24">
+        <section id="use-cases" data-reveal className="bg-gray-50 py-16 sm:py-24">
           <div className="mx-auto max-w-7xl px-5 sm:px-8">
             <div className="mb-10 flex flex-col justify-between gap-4 sm:mb-12 sm:flex-row sm:items-end">
               <div>
@@ -496,9 +644,9 @@ export default function LandingPage() {
               </div>
               <p className="max-w-sm text-sm leading-6 text-slate-600">{isKinyarwanda ? 'Everyday essentials and standout limited drops, delivered locally.' : 'Everyday essentials and standout limited drops, delivered locally.'}</p>
             </div>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4">
               {useCases.map((item) => (
-                <article key={item.title} className="group relative min-h-[390px] overflow-hidden rounded-2xl border border-gray-200 bg-gray-200 sm:min-h-[440px]">
+                <article key={item.title} data-reveal className="group relative min-h-[390px] overflow-hidden rounded-2xl border border-gray-200 bg-gray-200 sm:min-h-[440px]">
                   <div className="absolute inset-0 bg-cover bg-center transition duration-700 group-hover:scale-105" style={{ backgroundImage: `url('${item.image}')` }} />
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/5" />
                   <div className="absolute inset-x-0 bottom-0 p-6 sm:p-7">
@@ -512,7 +660,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="features" className="relative border-y border-gray-200 bg-white py-20 sm:py-28">
+        <section id="features" data-reveal className="relative border-y border-gray-200 bg-white py-20 sm:py-28">
           <div className="pointer-events-none absolute inset-0 opacity-[0.16]" aria-hidden="true">
             <svg className="h-full w-full" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" fill="none">
               <path d="M-100 200C150 20 360 360 610 190s380-110 620 20 300 180 430 30M-120 270C130 90 370 430 620 260s380-110 620 20 300 180 430 30M-140 340C110 160 380 500 630 330s380-110 620 20 300 180 430 30M-160 410C90 230 390 570 640 400s380-110 620 20 300 180 430 30" stroke="#0f172a" strokeOpacity=".18" />
@@ -524,9 +672,9 @@ export default function LandingPage() {
               <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">{isKinyarwanda ? 'The details that make INSHUTI special.' : 'The details that make INSHUTI special.'}</h2>
               <p className="mt-4 text-sm leading-6 text-slate-600 sm:text-base">{isKinyarwanda ? 'Thoughtful fabrics, fair pricing, and unique local designs for everyday wear.' : 'Thoughtful fabrics, fair pricing, and unique local designs for everyday wear.'}</p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-3">
               {featureCards.map(({ icon: Icon, title, text }, index) => (
-                <article key={title} className="rounded-2xl border border-slate-200 bg-gray-50 p-6 transition hover:border-slate-400 hover:shadow-md sm:p-7">
+                <article key={title} data-reveal className="rounded-2xl border border-slate-200 bg-gray-50 p-6 transition hover:border-slate-400 hover:shadow-md sm:p-7">
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-800"><Icon className="h-5 w-5" /></div>
                   <p className="mt-8 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">0{index + 1}</p>
                   <h3 className="mt-3 text-lg font-semibold leading-snug text-slate-900">{title}</h3>
@@ -537,17 +685,17 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="vision-mission" className="border-y border-gray-200 bg-white py-20 sm:py-28">
+        <section id="vision-mission" data-reveal className="border-y border-gray-200 bg-white py-20 sm:py-28">
           <div className="mx-auto max-w-6xl px-5 sm:px-8">
             <div className="mx-auto mb-10 max-w-3xl text-center">
               <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">Our Vision &amp; Mission</h2>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <article className="rounded-2xl border border-slate-200 bg-gray-50 p-7 shadow-sm sm:p-9">
+              <article data-reveal className="rounded-2xl border border-slate-200 bg-gray-50 p-7 shadow-sm sm:p-9">
                 <h3 className="text-xl font-semibold text-slate-900">Our Mission</h3>
                 <p className="mt-4 text-sm leading-7 text-slate-600 sm:text-base">To make high-quality apparel affordable and accessible by connecting Rwanda’s buyers and local makers through trusted, transparent technology. We empower local craftsmanship with simplicity, fairness, and confidence.</p>
               </article>
-              <article className="rounded-2xl border border-slate-200 bg-gray-50 p-7 shadow-sm sm:p-9">
+              <article data-reveal className="rounded-2xl border border-slate-200 bg-gray-50 p-7 shadow-sm sm:p-9">
                 <h3 className="text-xl font-semibold text-slate-900">Our Vision</h3>
                 <p className="mt-4 text-sm leading-7 text-slate-600 sm:text-base">To build a Rwanda where local apparel and craftsmanship are accessible to everyone. We envision a future where locally made fashion helps people express themselves with confidence and pride.</p>
               </article>
@@ -555,20 +703,20 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="team" className="bg-gray-50 py-16 sm:py-20">
+        <section id="team" data-reveal className="bg-gray-50 py-16 sm:py-20">
           <div className="mx-auto max-w-5xl px-5 sm:px-8">
             <div className="mb-10 text-center">
               <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">Meet Our Team</h2>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <article className="flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-sm sm:p-9">
+              <article data-reveal className="flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-sm sm:p-9">
                 <div className="h-32 w-32 overflow-hidden rounded-full border-4 border-white shadow-md ring-1 ring-slate-200">
                   <TeamAvatar variant="emmanuel" name="Emmanuel Niyogakiza" />
                 </div>
                 <h3 className="mt-6 text-xl font-semibold text-slate-900">Emmanuel Niyogakiza</h3>
                 <p className="mt-2 text-sm text-slate-600">Co-Founder &amp; CEO</p>
               </article>
-              <article className="flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-sm sm:p-9">
+              <article data-reveal className="flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-sm sm:p-9">
                 <div className="h-32 w-32 overflow-hidden rounded-full border-4 border-white shadow-md ring-1 ring-slate-200">
                   <img src="/cartoon_woman_avatar.svg" alt="Illustrated avatar of Nduwamariya Therese" className="h-full w-full object-cover" />
                 </div>
@@ -579,19 +727,19 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="reviews" className="bg-gray-50 py-20 sm:py-28">
+        <section id="reviews" data-reveal className="bg-gray-50 py-20 sm:py-28">
           <div className="mx-auto max-w-6xl px-5 sm:px-8">
             <div className="mb-10 max-w-2xl">
               <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">{isKinyarwanda ? 'FROM THE PEOPLE WHO WEAR IT' : 'FROM THE PEOPLE WHO WEAR IT'}</p>
               <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">{isKinyarwanda ? 'Confidence, worn every day.' : 'Confidence, worn every day.'}</h2>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <figure className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4">
+              <figure data-reveal className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
                 <div className="mb-7 flex gap-1 text-slate-900" aria-label="5 out of 5 stars">{Array.from({ length: 5 }, (_, i) => <span key={i}>★</span>)}</div>
                 <blockquote className="text-xs font-medium italic leading-relaxed text-slate-900">“Inshuti T-shirts are the best quality I've bought in Kigali. Super affordable, premium cotton fabric, and the fit is perfect for daily wear!”</blockquote>
                 <figcaption className="mt-7 border-t border-slate-200 pt-5 text-sm text-slate-500"><span className="font-semibold text-slate-900">Eric M.</span><span className="mx-2 text-slate-300">/</span>UR Gikondo</figcaption>
               </figure>
-              <figure className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
+              <figure data-reveal className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
                 <div className="mb-7 flex gap-1 text-slate-900" aria-label="5 out of 5 stars">{Array.from({ length: 5 }, (_, i) => <span key={i}>★</span>)}</div>
                 <blockquote className="text-xs font-medium italic leading-relaxed text-slate-900">“Ordered two men's shirts via WhatsApp and they delivered right to my place in Kimironko the same day. Great quality for RWF 12,000.”</blockquote>
                 <figcaption className="mt-7 border-t border-slate-200 pt-5 text-sm text-slate-500"><span className="font-semibold text-slate-900">Jean-Paul K.</span><span className="mx-2 text-slate-300">/</span>Kigali</figcaption>
@@ -600,25 +748,79 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="pricing" className="relative overflow-hidden border-t border-gray-200 bg-white px-5 py-20 sm:px-8 sm:py-28">
+        <section id="faq" data-reveal className="bg-gray-50 py-20 sm:py-28">
+          <div className="mx-auto max-w-5xl px-5 sm:px-8">
+            <div className="mx-auto mb-10 max-w-3xl text-center">
+              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">INSHUTI</p>
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">Frequently Asked Questions</h2>
+            </div>
+            <div className="grid gap-3">
+              {faqItems.map((item, index) => {
+                const isOpen = openFaqIndex === index;
+                const answerId = `faq-answer-${index}`;
+
+                return (
+                  <article key={item.question} data-reveal className="rounded-2xl border border-slate-200 bg-white px-5 sm:px-7">
+                    <h3>
+                      <button
+                        type="button"
+                        id={`faq-question-${index}`}
+                        aria-expanded={isOpen}
+                        aria-controls={answerId}
+                        onClick={() => setOpenFaqIndex(isOpen ? null : index)}
+                        className="flex min-h-16 w-full items-center justify-between gap-5 py-4 text-left text-base font-semibold text-slate-900"
+                      >
+                        <span>{item.question}</span>
+                        <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 text-lg font-normal text-slate-600">{isOpen ? '−' : '+'}</span>
+                      </button>
+                    </h3>
+                    <div id={answerId} role="region" aria-labelledby={`faq-question-${index}`} className={`grid transition-[grid-template-rows] duration-300 ease-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                      <div className="overflow-hidden">
+                        <p className="pb-5 pr-12 text-sm leading-6 text-slate-600">{item.answer}</p>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section id="pricing" data-reveal className="relative overflow-hidden border-t border-gray-200 bg-white px-5 py-20 sm:px-8 sm:py-28">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(15,23,42,0.06),transparent_55%)]" />
-          <div className="relative mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-gray-50 p-7 text-center shadow-[0_30px_100px_rgba(15,23,42,0.08)] sm:p-12">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white"><CheckCircle2 className="h-5 w-5 text-slate-900" /></div>
-            <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">{isKinyarwanda ? 'LOCAL QUALITY, EVERYDAY STYLE' : 'LOCAL QUALITY, EVERYDAY STYLE'}</p>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">{isKinyarwanda ? 'Wear confidence. Support local craftsmanship.' : 'Wear confidence. Support local craftsmanship.'}</h2>
-            <p className="mt-5 text-lg text-slate-700">T-SHIRTS FROM RWF 12,000 <span className="text-sm text-slate-500">/ piece</span></p>
-            <button type="button" onClick={openOrderModal} className="mt-8 inline-flex min-h-12 w-full max-w-sm items-center justify-center gap-2 rounded-full bg-slate-900 px-7 text-sm font-bold text-white transition hover:bg-black">
-              {isKinyarwanda ? 'Order Your First Drop Now' : 'Order Your First Drop Now'} <ArrowRight className="h-4 w-4" />
-            </button>
-            <p className="mt-4 text-xs text-slate-500">{isKinyarwanda ? 'Locally made apparel for everyday confidence.' : 'Locally made apparel for everyday confidence.'}</p>
+          <div className="relative mx-auto max-w-5xl rounded-3xl border border-slate-200 bg-gray-50 p-7 shadow-[0_30px_100px_rgba(15,23,42,0.08)] sm:p-12">
+            <div className="grid gap-8 md:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)] md:items-center">
+              <div className="text-center md:text-left">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white md:mx-0"><CheckCircle2 className="h-5 w-5 text-slate-900" /></div>
+                <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">{isKinyarwanda ? 'LOCAL QUALITY, EVERYDAY STYLE' : 'LOCAL QUALITY, EVERYDAY STYLE'}</p>
+                <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">{isKinyarwanda ? 'Wear confidence. Support local craftsmanship.' : 'Wear confidence. Support local craftsmanship.'}</h2>
+                <p className="mt-4 text-xs text-slate-500">{isKinyarwanda ? 'Locally made apparel for everyday confidence.' : 'Locally made apparel for everyday confidence.'}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm sm:p-8">
+                <p className="text-lg text-slate-700">T-SHIRTS FROM RWF 12,000 <span className="text-sm text-slate-500">/ piece</span></p>
+                <button type="button" onClick={openOrderModal} className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-slate-900 px-7 text-sm font-bold text-white transition hover:bg-black">
+                  {isKinyarwanda ? 'Order Your First Drop Now' : 'Order Your First Drop Now'} <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section aria-label="Explore all apparel" className="bg-slate-900 px-5 py-12 text-white sm:px-8 sm:py-16">
+          <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-5 sm:flex-row sm:items-center">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/55">Made in Rwanda · Made for everyday</p>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Find your next INSHUTI favourite.</h2>
+            </div>
+            <a href="/shop" className="inline-flex min-h-12 items-center gap-2 rounded-full bg-white px-6 text-sm font-bold text-slate-900 transition hover:bg-gray-100">Explore All Apparel <ArrowRight className="h-4 w-4" /></a>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-gray-200 bg-white">
+      <footer data-reveal className="border-t border-gray-200 bg-white">
         <div className="mx-auto grid max-w-7xl gap-9 px-5 py-10 sm:px-8 md:grid-cols-[1fr_auto_auto] md:items-center">
           <div>
-            <a href="#top" className="text-sm font-black tracking-[0.28em] text-slate-900">INSHUTI</a>
+            <a href="#top" aria-label="INSHUTI store home" className="inline-flex items-center"><InshutiLogo variant="light" className="inshuti-logo--large" /></a>
             <p className="mt-3 max-w-sm text-xs leading-5 text-slate-500">{isKinyarwanda ? 'Simple, affordable, high-quality fashion for Rwanda’s youth and everyday creators.' : 'Simple, affordable, high-quality fashion for Rwanda’s youth and everyday creators.'}</p>
           </div>
           <nav className="flex flex-wrap gap-x-6 gap-y-3 text-xs text-slate-600">
@@ -644,7 +846,10 @@ export default function LandingPage() {
             </nav>
           </div>
         </div>
-        <div className="border-t border-gray-200 px-5 py-5 text-center text-[10px] text-slate-500 sm:px-8">© 2026 Inshuti / Ubiko. All rights reserved.</div>
+        <div className="flex flex-col items-center justify-between gap-3 border-t border-gray-200 px-5 py-5 text-[10px] text-slate-500 sm:flex-row sm:px-8">
+          <span>© 2026 Inshuti / Ubiko. All rights reserved.</span>
+          <a href="/admin" className="inline-flex items-center gap-1.5 text-slate-400 transition hover:text-slate-700"><LockKeyhole className="h-3 w-3" /> Owner Admin</a>
+        </div>
       </footer>
 
       {orderModalOpen && (
@@ -670,7 +875,7 @@ export default function LandingPage() {
               </button>
             </div>
             <div className="mt-6 grid gap-3">
-              <a href={whatsappOrderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 items-center justify-center rounded-full bg-slate-900 px-5 text-center text-sm font-bold text-white transition hover:bg-black">
+              <a href={whatsappOrderUrl} onClick={() => { orderSubmittedRef.current = true; recordActivityPage('WhatsApp / MTN MoMo', '/'); }} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 items-center justify-center rounded-full bg-slate-900 px-5 text-center text-sm font-bold text-white transition hover:bg-black">
                 Order via WhatsApp (+250793683432)
               </a>
               <button type="button" onClick={() => setMomoInstructionsOpen((open) => !open)} aria-expanded={momoInstructionsOpen} aria-controls="momo-instructions" className="inline-flex min-h-12 items-center justify-center rounded-full border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:bg-gray-100">

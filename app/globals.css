@@ -1,10 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: dark;
+    --color-ink: #ffffff;
+    --color-text-muted: #a1a1aa;
+    --color-text-subtle: #a1a1aa;
+    --color-surface: #050505;
+    --color-surface-soft: #111111;
+    --color-border: rgba(255, 255, 255, 0.08);
+    --color-accent: #3b82f6;
+    --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --shadow-card: 0 12px 32px rgb(15 23 42 / 0.08);
+    --section-space: 5rem;
+    --section-space-compact: 4rem;
+    --radius-card: 1rem;
+    --motion-reveal-duration: 800ms;
   }
 
   html {
@@ -13,6 +28,21 @@
 
   body {
     @apply m-0 min-h-screen bg-white font-sans text-slate-900 antialiased;
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  :root[data-theme='light'] {
+    color-scheme: light;
+    --color-ink: #111111;
+    --color-text-muted: #475569;
+    --color-text-subtle: #64748b;
+    --color-surface: #ffffff;
+    --color-surface-soft: #f9fafb;
+    --color-border: #e2e8f0;
+    --color-accent: #0f172a;
   }
 
   a {
@@ -22,6 +52,163 @@
   button,
   input {
     font: inherit;
+  }
+}
+
+.inshuti-logo {
+  display: inline-flex;
+  width: max-content;
+  flex-direction: column;
+  align-items: flex-end;
+  color: #111111;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.inshuti-logo--dark { color: #ffffff; }
+.inshuti-logo__top { display: inline-flex; align-items: center; }
+.inshuti-logo__word { font-size: 0.88rem; font-weight: 900; letter-spacing: -0.045em; }
+.inshuti-logo__signature {
+  margin-top: -0.02rem;
+  margin-right: 0.12rem;
+  color: #3b82f6;
+  font-family: 'Caveat', cursive;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.015em;
+  transform: rotate(-3deg);
+}
+.inshuti-logo--dark .inshuti-logo__signature { color: #93c5fd; }
+.inshuti-logo--large .inshuti-logo__word { font-size: 1.05rem; }
+.inshuti-logo--large .inshuti-logo__signature { font-size: 1.22rem; }
+:root[data-theme='dark'] .inshuti-logo--light,
+.dark .inshuti-logo--light { color: #ffffff; }
+:root[data-theme='dark'] .inshuti-logo__signature,
+.dark .inshuti-logo__signature { color: #93c5fd; }
+
+/* Theme colors for the existing Tailwind utility based layout. */
+:root[data-theme='dark'] body,
+:root[data-theme='dark'] .bg-white {
+  background-color: #050505;
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .bg-white\/95 {
+  background-color: rgb(5 5 5 / 0.95);
+}
+
+:root[data-theme='dark'] .bg-gray-50,
+:root[data-theme='dark'] .bg-gray-100,
+:root[data-theme='dark'] .bg-gray-200,
+:root[data-theme='dark'] .bg-slate-50 {
+  background-color: #111111;
+}
+
+:root[data-theme='dark'] .text-slate-900,
+:root[data-theme='dark'] .text-gray-900,
+:root[data-theme='dark'] .text-black {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .text-slate-800,
+:root[data-theme='dark'] .text-slate-700,
+:root[data-theme='dark'] .text-slate-600,
+:root[data-theme='dark'] .text-slate-500,
+:root[data-theme='dark'] .text-slate-400 {
+  color: #a1a1aa;
+}
+
+:root[data-theme='dark'] .border-gray-200,
+:root[data-theme='dark'] .border-slate-200,
+:root[data-theme='dark'] .border-slate-300,
+:root[data-theme='dark'] .border-white\/80 {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme='dark'] .bg-white\/10 {
+  background-color: rgb(17 17 17 / 0.85);
+}
+
+:root[data-theme='dark'] a.bg-slate-900,
+:root[data-theme='dark'] button.bg-slate-900 {
+  background-color: #3b82f6;
+}
+
+:root[data-theme='dark'] a.bg-slate-900:hover,
+:root[data-theme='dark'] button.bg-slate-900:hover {
+  background-color: #2563eb;
+}
+
+:root[data-theme='dark'] .bg-white input,
+:root[data-theme='dark'] input {
+  color: #ffffff;
+}
+
+:root[data-theme='light'] body,
+:root[data-theme='light'] .bg-white {
+  background-color: #ffffff;
+  color: #111111;
+}
+
+:root[data-theme='light'] .bg-white\/95 {
+  background-color: rgb(255 255 255 / 0.95);
+}
+
+:root[data-theme='light'] .bg-gray-50,
+:root[data-theme='light'] .bg-gray-100,
+:root[data-theme='light'] .bg-slate-50 {
+  background-color: #ffffff;
+}
+
+body,
+header,
+section,
+footer,
+article,
+figure,
+button,
+a {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: all var(--motion-reveal-duration) ease-out;
+}
+
+[data-reveal].visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.brand-ticker-track {
+  display: flex;
+  width: max-content;
+  gap: 0;
+  animation: marquee 90s linear infinite;
+  will-change: transform;
+}
+
+.brand-ticker-track:hover {
+  animation-play-state: paused;
+}
+
+.brand-ticker-content {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2rem;
+  padding-right: 2rem;
+  white-space: nowrap;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
   }
 }
 
@@ -57,7 +244,12 @@
 
   @media (prefers-reduced-motion: reduce) {
     .animate-float,
-    .animate-float-shirt {
+    .animate-float-shirt,
+    .brand-ticker-track,
+    [data-reveal] {
       animation: none;
+      opacity: 1;
+      transform: none;
+      transition: none;
     }
   }

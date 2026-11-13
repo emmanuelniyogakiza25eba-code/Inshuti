@@ -1,5 +1,6 @@
 import './globals.css';
 import type { Metadata } from 'next';
+import ActivityTracker from '@/src/hooks/useActivityTracker';
 
 export const metadata: Metadata = {
   title: 'INSHUTI Apparel | Rwanda',
@@ -8,13 +9,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="dark">
       <head>
-        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-        <link rel="alternate icon" href="/favicon.ico" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="alternate icon" href="/icon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
-      <body>{children}</body>
+      <body>
+        <ActivityTracker />
+        {children}
+      </body>
     </html>
   );
 }
