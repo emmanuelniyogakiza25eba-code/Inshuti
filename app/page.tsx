@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import type { User } from '@supabase/supabase-js';
 import {
   ShieldCheck,
   Cloud,
@@ -20,7 +21,14 @@ import {
   Moon,
 } from 'lucide-react';
 import { HOME_PAGE_IMAGE_SLOTS, fetchCloudStoreItems, getStoreAnalytics, isSupabaseConfigured, recordActivityFriction, recordActivityPage, type HomePageImageSlot } from '@/src/utils/storeAnalytics';
+import { supabase } from '@/src/lib/supabase';
 import InshutiLogo from '@/src/components/InshutiLogo';
+
+function authUserName(user: User) {
+  const metadata = user.user_metadata || {};
+  const name = [metadata.full_name, metadata.name, metadata.fullName].find((value) => typeof value === 'string' && value.trim()) as string | undefined;
+  return name?.trim() || user.email?.split('@')[0] || 'INSHUTI Customer';
+}
 
 function TeamAvatar({
   variant,
@@ -89,6 +97,7 @@ export default function LandingPage() {
   const [momoInstructionsOpen, setMomoInstructionsOpen] = useState(false);
   const orderSubmittedRef = useRef(false);
   const [shopperName, setShopperName] = useState('');
+  const [shopperEmail, setShopperEmail] = useState('');
   const displayedHeroProductImages = heroProductImages.map((image, index) => homePageImages[HOME_PAGE_IMAGE_SLOTS[index].id] || image);
   const wardrobeFeatureImage = homePageImages['home-wardrobe-feature'] || heroProductImages[heroProductIndex];
 
@@ -110,18 +119,58 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
-    try {
-      const profile = JSON.parse(window.localStorage.getItem('inshuti-shop-profile') || 'null');
-      if (profile && typeof profile.name === 'string') setShopperName(profile.name.trim());
-    } catch {
-      setShopperName('');
+    const applyHomeAuthUser = (user: User | null) => {
+      if (!user) {
+        setShopperName('');
+        setShopperEmail('');
+        window.localStorage.removeItem('inshuti-shop-profile');
+        return;
+      }
+      const name = authUserName(user);
+      const email = user.email?.trim().toLowerCase() || '';
+      setShopperName(name);
+      setShopperEmail(email);
+      let previousPreference: 'MEN' | 'WOMEN' = 'WOMEN';
+      try {
+        const oldProfile = JSON.parse(window.localStorage.getItem('inshuti-shop-profile') || 'null');
+        if (oldProfile?.preference === 'MEN' || oldProfile?.preference === 'WOMEN') previousPreference = oldProfile.preference;
+      } catch { /* Ignore malformed local profile data. */ }
+      const metadataPreference = String(user.user_metadata?.style_preference || '').toUpperCase();
+      const preference = metadataPreference === 'MEN' || metadataPreference === 'WOMEN' ? metadataPreference : previousPreference;
+      window.localStorage.setItem('inshuti-shop-profile', JSON.stringify({ name, email, preference }));
+    };
+
+    if (!supabase) {
+      try {
+        const profile = JSON.parse(window.localStorage.getItem('inshuti-shop-profile') || 'null');
+        if (profile && typeof profile.name === 'string') {
+          setShopperName(profile.name.trim());
+          setShopperEmail(typeof profile.email === 'string' ? profile.email : '');
+        }
+      } catch {
+        setShopperName('');
+        setShopperEmail('');
+      }
+      return;
     }
+
+    let active = true;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (active) applyHomeAuthUser(data.session?.user || null);
+    }).catch((error) => console.error('Could not restore INSHUTI customer session:', error));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active) applyHomeAuthUser(session?.user || null);
+    });
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const shopperInitials = shopperName.split(/\s+/).filter(Boolean).length > 1
     ? `${shopperName.trim().split(/\s+/)[0][0]}${shopperName.trim().split(/\s+/).slice(-1)[0]?.[0] || ''}`.toUpperCase()
     : shopperName.trim().slice(0, 2).toUpperCase();
-  const whatsappOrderUrl = `https://wa.me/250793683432?text=${encodeURIComponent('Hello INSHUTI, I would like to order the Everyday T-Shirt (RWF 12,000).')}`;
+  const whatsappOrderUrl = `https://wa.me/250793683432?text=${encodeURIComponent(`Hello INSHUTI, I would like to order the Everyday T-Shirt (RWF 12,000).${shopperName ? ` Customer: ${shopperName}${shopperEmail ? ` · ${shopperEmail}` : ''}.` : ''}`)}`;
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem('inshuti-theme');
@@ -485,14 +534,14 @@ export default function LandingPage() {
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             {shopperName ? (
-              <a href="/shop" aria-label={`Signed in as ${shopperName}`} className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-2.5 text-xs font-semibold text-slate-800 transition hover:bg-gray-100">
+              <a href="/shop?signin=1" aria-label={`Open account for ${shopperName}`} className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-2.5 text-xs font-semibold text-slate-800 transition hover:bg-gray-100">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">{shopperInitials}</span>
                 <span className="hidden max-w-24 truncate sm:inline">{shopperName.split(/\s+/)[0]}</span>
               </a>
             ) : (
               <div className="hidden items-center gap-1 sm:flex">
                 <a href="/shop?signin=1" className="inline-flex h-10 items-center rounded-full px-3 text-xs font-semibold text-slate-700 transition hover:bg-gray-100">Sign In</a>
-                <a href="/shop?signin=1" className="inline-flex h-10 items-center rounded-full bg-slate-900 px-4 text-xs font-bold text-white transition hover:bg-black">Sign Up</a>
+                <a href="/shop?signin=1&mode=signup" className="inline-flex h-10 items-center rounded-full bg-slate-900 px-4 text-xs font-bold text-white transition hover:bg-black">Sign Up</a>
               </div>
             )}
             <button
@@ -508,6 +557,8 @@ export default function LandingPage() {
           <nav className="grid gap-1 border-t border-gray-200 bg-white px-5 py-4 text-sm text-slate-700 lg:hidden">
             <a href="/shop" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 font-semibold hover:bg-gray-100">Explore Store →</a>
             {!shopperName && <a href="/shop?signin=1" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">Sign In / Sign Up</a>}
+            {!shopperName && <a href="/shop?signin=1&mode=signup" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">Create Account</a>}
+            {shopperName && <a href="/shop?signin=1" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">Account · {shopperName}</a>}
             <a href="#features" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">{isKinyarwanda ? 'Quality' : 'Quality'}</a>
             <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">FAQ</a>
             <a href="#reviews" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-3 py-3 hover:bg-gray-100">{isKinyarwanda ? 'Abakiriya' : 'Reviews'}</a>

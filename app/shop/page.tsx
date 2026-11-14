@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type SyntheticEvent } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Heart, LockKeyhole, Search, ShoppingBag, Star, UserRound, X } from 'lucide-react';
+import type { User } from '@supabase/supabase-js';
+import { supabase } from '@/src/lib/supabase';
 import { fetchCloudStoreItems, generateOrderReference, getStoreAnalytics, isSupabaseConfigured, logNewsletterSubscriber, logRegisteredUser, logStoreOrder, recordActivityFriction, recordActivityPage, updateActivityIdentity, type StoreProductRecord } from '@/src/utils/storeAnalytics';
 import { defaultStoreProducts } from '@/src/utils/defaultStoreCatalog';
 import InshutiLogo from '@/src/components/InshutiLogo';
@@ -31,6 +33,18 @@ type BagItem = { id: string; product: Product; size: string; backupSizes?: strin
 type PaymentConfirmation = { orderRef: string; totalRwf: number };
 type Review = { id: string; name: string; rating: number; message: string; verified: boolean };
 type ShopperProfile = { name: string; email: string; preference: Department };
+type CustomerAuthMode = 'signin' | 'signup';
+
+function shopperProfileFromAuthUser(user: User, fallbackPreference: Department): ShopperProfile {
+  const metadata = user.user_metadata || {};
+  const name = [metadata.full_name, metadata.name, metadata.fullName].find((value) => typeof value === 'string' && value.trim()) as string | undefined;
+  const preference = String(metadata.style_preference || metadata.preference || fallbackPreference).toUpperCase();
+  return {
+    name: name?.trim() || user.email?.split('@')[0] || 'INSHUTI Customer',
+    email: user.email?.trim().toLowerCase() || '',
+    preference: preference === 'MEN' ? 'MEN' : 'WOMEN',
+  };
+}
 
 const pexels = (id: number) => `https://images.pexels.com/photos/${id}/pexels-photo-${id}.jpeg?auto=compress&cs=tinysrgb&w=1200`;
 const unsplash = (id: string) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1200&q=85`;
@@ -269,6 +283,11 @@ export default function ShopPage() {
   const [profileNameDraft, setProfileNameDraft] = useState('');
   const [profileEmailDraft, setProfileEmailDraft] = useState('');
   const [profilePreferenceDraft, setProfilePreferenceDraft] = useState<Department>('WOMEN');
+  const [profilePassword, setProfilePassword] = useState('');
+  const [authMode, setAuthMode] = useState<CustomerAuthMode>('signin');
+  const [authError, setAuthError] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [savedDrawerOpen, setSavedDrawerOpen] = useState(false);
   const [bagDrawerOpen, setBagDrawerOpen] = useState(false);
@@ -282,6 +301,8 @@ export default function ShopPage() {
   const [personalizationCookies, setPersonalizationCookies] = useState(true);
   const [reviews, setReviews] = useState<Review[]>(initialReviews);
   const [reviewName, setReviewName] = useState('');
+  const [checkoutName, setCheckoutName] = useState('');
+  const [checkoutEmail, setCheckoutEmail] = useState('');
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewMessage, setReviewMessage] = useState('');
   const [newsletterEmail, setNewsletterEmail] = useState('');
@@ -299,18 +320,160 @@ export default function ShopPage() {
     .map((record) => toShopProduct({ ...record, ...catalogOverrides.productOverrides[record.id] })), [catalogOverrides]);
   const savedProducts = useMemo(() => [...visibleDefaultProducts, ...uploadedProducts].filter((product) => savedProductIds.includes(product.id)), [savedProductIds, uploadedProducts, visibleDefaultProducts]);
 
+  const applyAuthenticatedUser = (user: User | null) => {
+    if (!user) {
+      setShopperProfile(null);
+      setProfileNameDraft('');
+      setProfileEmailDraft('');
+      setReviewName('');
+      setCheckoutName('');
+      setCheckoutEmail('');
+      window.localStorage.removeItem('inshuti-shop-profile');
+      return;
+    }
+
+    let fallbackPreference = profilePreferenceDraft;
+    const pendingPreference = window.sessionStorage.getItem('inshuti-auth-preference-draft');
+    if (pendingPreference === 'MEN' || pendingPreference === 'WOMEN') {
+      fallbackPreference = pendingPreference;
+      window.sessionStorage.removeItem('inshuti-auth-preference-draft');
+    }
+    const profile = shopperProfileFromAuthUser(user, fallbackPreference);
+    setShopperProfile(profile);
+    setProfileNameDraft(profile.name);
+    setProfileEmailDraft(profile.email);
+    setProfilePreferenceDraft(profile.preference);
+    setDepartment(profile.preference);
+    setReviewName(profile.name);
+    setCheckoutName(profile.name);
+    setCheckoutEmail(profile.email);
+    window.localStorage.setItem('inshuti-shop-profile', JSON.stringify(profile));
+    if (profile.email) logRegisteredUser({ fullName: profile.name, email: profile.email, stylePreference: profile.preference });
+    updateActivityIdentity(profile.name, profile.email);
+  };
+
   const openProfileModal = () => {
     profileSubmittedRef.current = false;
     setProfileNameDraft(shopperProfile?.name || '');
     setProfileEmailDraft(shopperProfile?.email || '');
     setProfilePreferenceDraft(shopperProfile?.preference || department);
+    setAuthMode('signin');
+    setAuthError('');
+    setAuthMessage('');
+    setProfilePassword('');
     setProfileModalOpen(true);
     recordActivityPage('Sign In', '/shop');
   };
 
   const closeProfileModal = () => {
-    if (!profileSubmittedRef.current) recordActivityFriction('Sign In', 'Abandoned Sign-In without submitting profile');
+    if (!shopperProfile && !profileSubmittedRef.current) recordActivityFriction('Sign In', 'Abandoned Sign-In without submitting profile');
     setProfileModalOpen(false);
+    setProfilePassword('');
+  };
+
+  const submitCustomerAuth = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAuthError('');
+    setAuthMessage('');
+    if (!supabase) {
+      setAuthError('Customer authentication is not configured. Please try again later.');
+      return;
+    }
+    setAuthBusy(true);
+    try {
+      const email = profileEmailDraft.trim().toLowerCase();
+      if (authMode === 'signup') {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password: profilePassword,
+          options: {
+            data: { full_name: profileNameDraft.trim(), style_preference: profilePreferenceDraft },
+            emailRedirectTo: `${window.location.origin}/shop`,
+          },
+        });
+        if (error) throw error;
+        profileSubmittedRef.current = true;
+        if (data.session && data.user) {
+          applyAuthenticatedUser(data.user);
+          setProfileModalOpen(false);
+        } else {
+          setAuthMessage('Account created. Check your email to confirm your address, then sign in.');
+          setAuthMode('signin');
+          setProfilePassword('');
+        }
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: profilePassword });
+      if (error) throw error;
+      if (data.user) applyAuthenticatedUser(data.user);
+      profileSubmittedRef.current = true;
+      setProfileModalOpen(false);
+      setProfilePassword('');
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Authentication failed. Please try again.');
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const continueWithGoogle = async () => {
+    setAuthError('');
+    setAuthMessage('');
+    if (!supabase) {
+      setAuthError('Customer authentication is not configured. Please try again later.');
+      return;
+    }
+    setAuthBusy(true);
+    if (authMode === 'signup') window.sessionStorage.setItem('inshuti-auth-preference-draft', profilePreferenceDraft);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/shop` },
+      });
+      if (error) {
+        window.sessionStorage.removeItem('inshuti-auth-preference-draft');
+        setAuthError(error.message);
+      }
+    } catch (error) {
+      window.sessionStorage.removeItem('inshuti-auth-preference-draft');
+      setAuthError(error instanceof Error ? error.message : 'Google sign-in could not be started.');
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const saveCustomerPreference = async () => {
+    setAuthError('');
+    if (!supabase || !shopperProfile) return;
+    setAuthBusy(true);
+    try {
+      const { data, error } = await supabase.auth.updateUser({ data: { style_preference: profilePreferenceDraft } });
+      if (error) setAuthError(error.message);
+      else if (data.user) applyAuthenticatedUser(data.user);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Could not update your style preference.');
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const signOutCustomer = async () => {
+    setAuthError('');
+    if (!supabase) return;
+    setAuthBusy(true);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) setAuthError(error.message);
+      else {
+        profileSubmittedRef.current = true;
+        setProfileModalOpen(false);
+      }
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Could not sign out.');
+    } finally {
+      setAuthBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -357,6 +520,7 @@ export default function ShopPage() {
       }
       if (params.get('signin') === '1') {
         setProfileModalOpen(true);
+        if (params.get('mode') === 'signup') setAuthMode('signup');
         recordActivityPage('Sign In', '/shop');
       }
 
@@ -378,6 +542,28 @@ export default function ShopPage() {
     void initializeShop();
     return () => { active = false; window.removeEventListener('storage', handleStorage); };
   }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (active) applyAuthenticatedUser(data.session?.user || null);
+    }).catch((error) => console.error('Could not restore INSHUTI customer session:', error));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active) applyAuthenticatedUser(session?.user || null);
+    });
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!shopperProfile) return;
+    setCheckoutName(shopperProfile.name);
+    setCheckoutEmail(shopperProfile.email);
+    setReviewName(shopperProfile.name);
+  }, [shopperProfile]);
 
   useEffect(() => {
     if (!shopDataLoaded) return;
@@ -441,7 +627,8 @@ export default function ShopPage() {
     setPaymentCopied(false);
     recordActivityPage('WhatsApp / MTN MoMo', '/shop');
     const backupText = backupSizes.length ? `, backup fitting sizes ${backupSizes.join(' and ')}` : '';
-    const message = `Hello INSHUTI, I would like to order ${product.name}. Order ID: ${order.orderRef}. Primary size: ${size}${backupText}. Total: ${formatPrice(totalRwf)}${fitting ? ' including RWF 2,000 Kigali Home Fitting rider wait fee' : ''}. I would like to arrange MTN MoMo payment.`;
+    const customerDetails = shopperProfile ? ` Customer: ${shopperProfile.name}${shopperProfile.email ? ` · ${shopperProfile.email}` : ''}.` : '';
+    const message = `Hello INSHUTI, I would like to order ${product.name}. Order ID: ${order.orderRef}. Primary size: ${size}${backupText}. Total: ${formatPrice(totalRwf)}${fitting ? ' including RWF 2,000 Kigali Home Fitting rider wait fee' : ''}.${customerDetails} I would like to arrange MTN MoMo payment.`;
     window.open(`https://wa.me/250793683432?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
   };
 
@@ -478,8 +665,8 @@ export default function ShopPage() {
         size: item.size,
         priceRwf: item.product.price,
         totalPriceRwf: item.product.price + fittingFeeRwf,
-        customerName: shopperProfile?.name || 'Guest',
-        customerEmail: shopperProfile?.email || '',
+        customerName: checkoutName.trim() || shopperProfile?.name || 'Guest',
+        customerEmail: checkoutEmail.trim().toLowerCase() || shopperProfile?.email || '',
         eventType: 'whatsapp_order',
         paymentMethod: 'WhatsApp / MTN MoMo',
         status: 'Pending MoMo',
@@ -494,7 +681,10 @@ export default function ShopPage() {
     setPaymentCopied(false);
     setBagItems([]);
     recordActivityPage('WhatsApp / MTN MoMo', '/shop');
-    const message = `Hello INSHUTI, I would like to place order ${orderRef}:\n${messageLines.join('\n')}\nTotal: ${formatPrice(totalRwf)}${fittingRequested ? ' (includes RWF 2,000 Kigali Home Fitting rider wait fee)' : ''}. I would like to arrange MTN MoMo payment.`;
+    const customerDetails = checkoutName.trim() || shopperProfile?.name
+      ? `\nCustomer: ${checkoutName.trim() || shopperProfile?.name}${checkoutEmail.trim() || shopperProfile?.email ? ` · ${checkoutEmail.trim() || shopperProfile?.email}` : ''}`
+      : '';
+    const message = `Hello INSHUTI, I would like to place order ${orderRef}:\n${messageLines.join('\n')}\nTotal: ${formatPrice(totalRwf)}${fittingRequested ? ' (includes RWF 2,000 Kigali Home Fitting rider wait fee)' : ''}.${customerDetails} I would like to arrange MTN MoMo payment.`;
     window.open(`https://wa.me/250793683432?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
   };
 
@@ -510,7 +700,7 @@ export default function ShopPage() {
     event.preventDefault();
     if (!reviewName.trim() || !reviewMessage.trim()) return;
     setReviews((current) => [{ id: `${Date.now()}`, name: reviewName.trim(), rating: reviewRating, message: reviewMessage.trim(), verified: false }, ...current]);
-    setReviewName('');
+    setReviewName(shopperProfile?.name || '');
     setReviewRating(5);
     setReviewMessage('');
   };
@@ -862,6 +1052,10 @@ export default function ShopPage() {
               }) : <p className="py-16 text-center text-sm text-slate-500">Your bag is empty. Explore the latest INSHUTI drops to add something.</p>}
             </div>
             {bagItems.length > 0 && <div className="border-t border-slate-200 p-5">
+              <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                <label className="text-[10px] font-semibold text-slate-600">Full name<input value={checkoutName} onChange={(event) => setCheckoutName(event.target.value)} autoComplete="name" placeholder="Your name" className="mt-1 h-10 w-full border border-slate-300 bg-white px-3 text-xs text-slate-900 outline-none focus:border-slate-900" /></label>
+                <label className="text-[10px] font-semibold text-slate-600">Email<input type="email" value={checkoutEmail} onChange={(event) => setCheckoutEmail(event.target.value)} autoComplete="email" placeholder="you@example.com" className="mt-1 h-10 w-full border border-slate-300 bg-white px-3 text-xs text-slate-900 outline-none focus:border-slate-900" /></label>
+              </div>
               <div className="flex justify-between text-xs text-slate-600"><span>Subtotal</span><span>{formatPrice(bagItems.reduce((sum, item) => sum + item.product.price, 0))}</span></div>
               <div className="mt-2 flex justify-between text-xs text-slate-600"><span>Kigali Home Fitting</span><span>{bagItems.some((item) => item.fitting) ? formatPrice(2000) : formatPrice(0)}</span></div>
               <div className="mt-3 flex justify-between border-t border-slate-200 pt-3 text-sm font-bold"><span>Order total</span><span>{formatPrice(bagItems.reduce((sum, item) => sum + item.product.price, 0) + (bagItems.some((item) => item.fitting) ? 2000 : 0))}</span></div>
@@ -912,29 +1106,50 @@ export default function ShopPage() {
           <section role="dialog" aria-modal="true" aria-labelledby="profile-modal-title" onClick={(event) => event.stopPropagation()} className="relative min-h-full max-h-full w-full max-w-none overflow-y-auto rounded-none bg-white p-6 text-slate-900 shadow-2xl md:min-h-0 md:max-w-md md:rounded-2xl md:p-8">
             <button type="button" onClick={closeProfileModal} aria-label="Close sign in" className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full hover:bg-slate-100"><X className="h-4 w-4" /></button>
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">INSHUTI ACCOUNT</p>
-            <h2 id="profile-modal-title" className="mt-2 text-2xl font-bold">Sign In / Personalize</h2>
-            <form onSubmit={(event) => {
-              event.preventDefault();
-              const profile = { name: profileNameDraft.trim(), email: profileEmailDraft.trim().toLowerCase(), preference: profilePreferenceDraft };
-              if (!profile.name || !profile.email) return;
-              logRegisteredUser({ fullName: profile.name, email: profile.email, stylePreference: profile.preference });
-              profileSubmittedRef.current = true;
-              setShopperProfile(profile);
-              setDepartment(profile.preference);
-              updateActivityIdentity(profile.name, profile.email);
-              closeProfileModal();
-            }}>
-              <label htmlFor="shopper-name" className="mt-6 block text-xs font-semibold">Your name</label>
-              <input id="shopper-name" value={profileNameDraft} onChange={(event) => setProfileNameDraft(event.target.value)} required placeholder="e.g. Ange or Eric" className="mt-2 h-11 w-full border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900" />
-              <label htmlFor="shopper-email" className="mt-5 block text-xs font-semibold">Email address</label>
-              <input id="shopper-email" type="email" value={profileEmailDraft} onChange={(event) => setProfileEmailDraft(event.target.value)} required placeholder="you@example.com" className="mt-2 h-11 w-full border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900" />
-              <label htmlFor="shopper-preference" className="mt-5 block text-xs font-semibold">Style preference</label>
-              <select id="shopper-preference" value={profilePreferenceDraft} onChange={(event) => setProfilePreferenceDraft(event.target.value as Department)} className="mt-2 h-11 w-full border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900">
-                <option value="WOMEN">Women</option>
-                <option value="MEN">Men</option>
-              </select>
-              <button type="submit" className="mt-7 h-12 w-full bg-slate-900 text-xs font-bold tracking-[0.14em] text-white">SAVE MY PREFERENCES</button>
-            </form>
+            <h2 id="profile-modal-title" className="mt-2 text-2xl font-bold">{shopperProfile ? 'Your INSHUTI Account' : authMode === 'signup' ? 'Create your account' : 'Sign in to INSHUTI'}</h2>
+            {shopperProfile ? (
+              <div className="mt-6">
+                <p className="text-sm font-semibold">{shopperProfile.name}</p>
+                <p className="mt-1 text-xs text-slate-500">{shopperProfile.email}</p>
+                <label htmlFor="shopper-preference" className="mt-6 block text-xs font-semibold">Style preference</label>
+                <select id="shopper-preference" value={profilePreferenceDraft} onChange={(event) => setProfilePreferenceDraft(event.target.value as Department)} className="mt-2 h-11 w-full border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900">
+                  <option value="WOMEN">Women</option>
+                  <option value="MEN">Men</option>
+                </select>
+                <button type="button" disabled={authBusy} onClick={saveCustomerPreference} className="mt-4 h-11 w-full border border-slate-300 text-xs font-bold tracking-[0.12em] disabled:opacity-50">SAVE PREFERENCE</button>
+                {authError && <p role="alert" className="mt-3 text-xs text-rose-700">{authError}</p>}
+                <button type="button" disabled={authBusy} onClick={signOutCustomer} className="mt-3 h-11 w-full bg-slate-900 text-xs font-bold tracking-[0.14em] text-white disabled:opacity-50">{authBusy ? 'PLEASE WAIT…' : 'SIGN OUT'}</button>
+              </div>
+            ) : (
+              <>
+                <div className="mt-6 grid grid-cols-2 rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Customer account access">
+                  <button type="button" role="tab" aria-selected={authMode === 'signin'} onClick={() => { setAuthMode('signin'); setAuthError(''); setAuthMessage(''); }} className={`h-10 rounded-md text-xs font-bold ${authMode === 'signin' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>SIGN IN</button>
+                  <button type="button" role="tab" aria-selected={authMode === 'signup'} onClick={() => { setAuthMode('signup'); setAuthError(''); setAuthMessage(''); }} className={`h-10 rounded-md text-xs font-bold ${authMode === 'signup' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>CREATE ACCOUNT</button>
+                </div>
+                <button type="button" disabled={authBusy} onClick={continueWithGoogle} className="mt-5 flex h-12 w-full items-center justify-center gap-3 rounded-md border border-slate-300 bg-white text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:opacity-50">
+                  <svg viewBox="0 0 48 48" aria-hidden="true" className="h-5 w-5"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z" transform="translate(0 4)"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.75 7.18l7.73 6C44.43 37.98 46.98 31.8 46.98 24.55Z"/><path fill="#FBBC05" d="M10.53 28.59a14.4 14.4 0 0 1-.76-4.59c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.87.93 7.54 2.56 10.78l7.97-6.19Z" transform="translate(0 0)"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.8l-7.73-6c-2.14 1.44-4.89 2.3-8.17 2.3-6.26 0-11.57-4.22-13.46-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z"/></svg>
+                  Continue with Google
+                </button>
+                <div className="my-5 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400"><span className="h-px flex-1 bg-slate-200" />Or continue with email<span className="h-px flex-1 bg-slate-200" /></div>
+                <form onSubmit={submitCustomerAuth}>
+                  {authMode === 'signup' && <>
+                    <label htmlFor="shopper-name" className="block text-xs font-semibold">Full name</label>
+                    <input id="shopper-name" value={profileNameDraft} onChange={(event) => setProfileNameDraft(event.target.value)} required autoComplete="name" placeholder="e.g. Ange Uwase" className="mt-2 h-11 w-full border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900" />
+                  </>}
+                  <label htmlFor="shopper-email" className={`${authMode === 'signup' ? 'mt-4' : ''} block text-xs font-semibold`}>Email address</label>
+                  <input id="shopper-email" type="email" value={profileEmailDraft} onChange={(event) => setProfileEmailDraft(event.target.value)} required autoComplete="email" placeholder="you@example.com" className="mt-2 h-11 w-full border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900" />
+                  <label htmlFor="shopper-password" className="mt-4 block text-xs font-semibold">Password</label>
+                  <input id="shopper-password" type="password" value={profilePassword} onChange={(event) => setProfilePassword(event.target.value)} required minLength={6} autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} placeholder="At least 6 characters" className="mt-2 h-11 w-full border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900" />
+                  {authMode === 'signup' && <>
+                    <label htmlFor="shopper-preference" className="mt-4 block text-xs font-semibold">Style preference</label>
+                    <select id="shopper-preference" value={profilePreferenceDraft} onChange={(event) => setProfilePreferenceDraft(event.target.value as Department)} className="mt-2 h-11 w-full border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900"><option value="WOMEN">Women</option><option value="MEN">Men</option></select>
+                  </>}
+                  {authError && <p role="alert" className="mt-3 text-xs text-rose-700">{authError}</p>}
+                  {authMessage && <p role="status" className="mt-3 text-xs text-emerald-700">{authMessage}</p>}
+                  <button type="submit" disabled={authBusy} className="mt-6 h-12 w-full bg-slate-900 text-xs font-bold tracking-[0.14em] text-white disabled:opacity-50">{authBusy ? 'PLEASE WAIT…' : authMode === 'signup' ? 'CREATE ACCOUNT' : 'SIGN IN'}</button>
+                </form>
+              </>
+            )}
           </section>
         </div>
       )}
