@@ -23,6 +23,7 @@ import {
 import { HOME_PAGE_IMAGE_SLOTS, fetchCloudStoreItems, getStoreAnalytics, isSupabaseConfigured, recordActivityFriction, recordActivityPage, type HomePageImageSlot } from '@/src/utils/storeAnalytics';
 import { supabase } from '@/src/lib/supabase';
 import InshutiLogo from '@/src/components/InshutiLogo';
+import GoogleWelcomePrompt from '@/src/components/GoogleWelcomePrompt';
 
 function authUserName(user: User) {
   const metadata = user.user_metadata || {};
@@ -98,6 +99,7 @@ export default function LandingPage() {
   const orderSubmittedRef = useRef(false);
   const [shopperName, setShopperName] = useState('');
   const [shopperEmail, setShopperEmail] = useState('');
+  const [authLoading, setAuthLoading] = useState(Boolean(supabase));
   const displayedHeroProductImages = heroProductImages.map((image, index) => homePageImages[HOME_PAGE_IMAGE_SLOTS[index].id] || image);
   const wardrobeFeatureImage = homePageImages['home-wardrobe-feature'] || heroProductImages[heroProductIndex];
 
@@ -151,15 +153,16 @@ export default function LandingPage() {
         setShopperName('');
         setShopperEmail('');
       }
+      setAuthLoading(false);
       return;
     }
 
     let active = true;
     void supabase.auth.getSession().then(({ data }) => {
-      if (active) applyHomeAuthUser(data.session?.user || null);
-    }).catch((error) => console.error('Could not restore INSHUTI customer session:', error));
+      if (active) { applyHomeAuthUser(data.session?.user || null); setAuthLoading(false); }
+    }).catch((error) => { console.error('Could not restore INSHUTI customer session:', error); if (active) setAuthLoading(false); });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (active) applyHomeAuthUser(session?.user || null);
+      if (active) { applyHomeAuthUser(session?.user || null); setAuthLoading(false); }
     });
     return () => {
       active = false;
@@ -566,6 +569,8 @@ export default function LandingPage() {
           </nav>
         )}
       </header>
+
+      <GoogleWelcomePrompt signedIn={Boolean(shopperName)} authLoading={authLoading} onEmailClick={() => { window.location.href = '/shop?signin=1'; }} />
 
       <main>
         <section id="top" className="relative flex min-h-[calc(100svh-72px)] flex-col items-center justify-start overflow-hidden border-b border-gray-200 bg-gray-100">

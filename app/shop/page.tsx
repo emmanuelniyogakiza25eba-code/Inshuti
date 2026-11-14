@@ -8,6 +8,7 @@ import { supabase } from '@/src/lib/supabase';
 import { fetchCloudStoreItems, generateOrderReference, getStoreAnalytics, isSupabaseConfigured, logNewsletterSubscriber, logRegisteredUser, logStoreOrder, recordActivityFriction, recordActivityPage, updateActivityIdentity, type StoreProductRecord } from '@/src/utils/storeAnalytics';
 import { defaultStoreProducts } from '@/src/utils/defaultStoreCatalog';
 import InshutiLogo from '@/src/components/InshutiLogo';
+import GoogleWelcomePrompt from '@/src/components/GoogleWelcomePrompt';
 
 type Department = 'WOMEN' | 'MEN';
 type ProductSection = 'The Latest Drops' | 'Kigali Everyday Essentials' | 'Limited Editions & Event Wear' | 'Footwear & Accessories';
@@ -280,6 +281,7 @@ export default function ShopPage() {
   const [savedProductIds, setSavedProductIds] = useState<string[]>([]);
   const [bagItems, setBagItems] = useState<BagItem[]>([]);
   const [shopperProfile, setShopperProfile] = useState<ShopperProfile | null>(null);
+  const [authLoading, setAuthLoading] = useState(Boolean(supabase));
   const [profileNameDraft, setProfileNameDraft] = useState('');
   const [profileEmailDraft, setProfileEmailDraft] = useState('');
   const [profilePreferenceDraft, setProfilePreferenceDraft] = useState<Department>('WOMEN');
@@ -559,13 +561,13 @@ export default function ShopPage() {
   }, []);
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase) { setAuthLoading(false); return; }
     let active = true;
     void supabase.auth.getSession().then(({ data }) => {
-      if (active) applyAuthenticatedUser(data.session?.user || null, data.session?.access_token);
-    }).catch((error) => console.error('Could not restore INSHUTI customer session:', error));
+      if (active) { applyAuthenticatedUser(data.session?.user || null, data.session?.access_token); setAuthLoading(false); }
+    }).catch((error) => { console.error('Could not restore INSHUTI customer session:', error); if (active) setAuthLoading(false); });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (active) applyAuthenticatedUser(session?.user || null, session?.access_token);
+      if (active) { applyAuthenticatedUser(session?.user || null, session?.access_token); setAuthLoading(false); }
     });
     return () => {
       active = false;
@@ -772,6 +774,7 @@ export default function ShopPage() {
 
   return (
     <main className="min-h-screen overflow-x-clip bg-white text-slate-900" style={{ fontFamily: "Futura, 'Plus Jakarta Sans', Inter, sans-serif" }}>
+      <GoogleWelcomePrompt signedIn={Boolean(shopperProfile)} authLoading={authLoading} onEmailClick={openProfileModal} />
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-3 px-3 py-3 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(260px,520px)_minmax(0,1fr)] lg:gap-x-5 lg:py-5">
           <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 sm:gap-4 lg:gap-5">

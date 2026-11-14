@@ -27,6 +27,8 @@ type AdminCatalogItem = {
   productType: 'Clothing' | 'Shoes';
   source: 'uploaded' | 'default';
 };
+type CampaignProduct = { id: string; title: string; category: string; priceRwf: number; imageUrl: string };
+type CampaignHistoryItem = { id: string; subject: string; intro_message: string; product_ids: string[]; product_payloads: CampaignProduct[]; recipient_count: number; status: string; sent_at: string | null; scheduled_for: string | null; created_at: string };
 const storePlacementOptions: { value: StoreProductSection; label: string }[] = [
   { value: 'Hero Banner', label: 'Hero Banner (Top Featured Banner)' },
   { value: 'The Latest Drops', label: 'The Latest Drops' },
@@ -115,7 +117,7 @@ export default function AdminPage() {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [analytics, setAnalytics] = useState<StoreAnalytics>(emptyAnalytics);
-  const [adminTab, setAdminTab] = useState<'overview' | 'media' | 'activity' | 'customers'>('overview');
+  const [adminTab, setAdminTab] = useState<'overview' | 'media' | 'activity' | 'customers' | 'campaigns'>('overview');
   const [activeMediaFolder, setActiveMediaFolder] = useState<string | null>(null);
   const [mediaPage, setMediaPage] = useState(1);
   const [mediaSearch, setMediaSearch] = useState('');
@@ -145,8 +147,16 @@ export default function AdminPage() {
   const [productSizes, setProductSizes] = useState<string[]>(clothingSizes);
   const [productLimitedOffer, setProductLimitedOffer] = useState(false);
   const [notifyNewProduct, setNotifyNewProduct] = useState(true);
-  const [notifyingProductId, setNotifyingProductId] = useState<string | null>(null);
-  const [notificationResult, setNotificationResult] = useState<{ id: string; message: string; error?: boolean } | null>(null);
+  const [campaignOpen, setCampaignOpen] = useState(false);
+  const [campaignProducts, setCampaignProducts] = useState<CampaignProduct[]>([]);
+  const [campaignSelectedIds, setCampaignSelectedIds] = useState<string[]>([]);
+  const [campaignSubject, setCampaignSubject] = useState('');
+  const [campaignIntro, setCampaignIntro] = useState('Fresh styles have just landed. Discover the latest INSHUTI pieces, made with care in Rwanda.');
+  const [campaignOwnerEmail, setCampaignOwnerEmail] = useState('');
+  const [scheduleMorningDrop, setScheduleMorningDrop] = useState(false);
+  const [campaignBusy, setCampaignBusy] = useState(false);
+  const [campaignFeedback, setCampaignFeedback] = useState<{ message: string; error?: boolean } | null>(null);
+  const [campaignHistory, setCampaignHistory] = useState<CampaignHistoryItem[]>([]);
   const [productImage, setProductImage] = useState('');
   const [productImageName, setProductImageName] = useState('');
   const [productFormError, setProductFormError] = useState('');
@@ -181,6 +191,16 @@ export default function AdminPage() {
     void refreshAnalytics();
     const interval = window.setInterval(() => { void refreshAnalytics(); }, 10000);
     return () => window.clearInterval(interval);
+  }, [isUnlocked]);
+
+  useEffect(() => {
+    if (!isUnlocked) return;
+    try { setCampaignOwnerEmail(window.localStorage.getItem('inshuti-campaign-owner-email') || ''); } catch { /* Keep the editor available if storage is disabled. */ }
+    void fetch('/api/email-campaigns', { credentials: 'same-origin', cache: 'no-store' }).then(async (response) => {
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not load campaign history.');
+      setCampaignHistory(Array.isArray(result.campaigns) ? result.campaigns : []);
+    }).catch((error) => console.error('Campaign history could not be loaded:', error));
   }, [isUnlocked]);
 
   const refreshAnalytics = async () => {
@@ -273,6 +293,66 @@ export default function AdminPage() {
     const labels = ['Hero Banners', 'Home Page Photos', 'Women · The Latest Drops', 'Women · Everyday Essentials', 'Women · Event Wear', 'Women · Shoes', 'Men · The Latest Drops', 'Men · Everyday Essentials', 'Men · Event Wear', 'Men · Shoes'];
     return [...labels.map((label) => ({ label, count: label === 'Home Page Photos' ? HOME_PAGE_IMAGE_SLOTS.length : mediaItems.filter((item) => mediaFolderLabel(item) === label).length })), { label: 'All Images', count: mediaItems.length }];
   }, [mediaItems]);
+  const campaignProductFromItem = (item: AdminCatalogItem): CampaignProduct => ({
+    id: item.id,
+    title: item.title,
+    category: `${item.department} · ${item.subtitle || item.section}`,
+    priceRwf: item.priceRwf,
+    imageUrl: item.imageDataUrl,
+  });
+  const openCampaignProducts = (products: CampaignProduct[]) => {
+    setCampaignProducts(products);
+    setCampaignSelectedIds(products.map((product) => product.id));
+    setCampaignSubject(`New Arrival at INSHUTI st@re: ${products[0]?.title || ''}`);
+    setCampaignIntro('Fresh styles have just landed. Discover the latest INSHUTI pieces, made with care in Rwanda.');
+    setCampaignFeedback(null);
+    setScheduleMorningDrop(false);
+    setCampaignOpen(true);
+    setAdminTab('campaigns');
+  };
+  const openCampaignEditor = (items: AdminCatalogItem[]) => openCampaignProducts(items.map(campaignProductFromItem));
+  const addCampaignProduct = (id: string) => {
+    const item = catalogueItems.find((candidate) => candidate.id === id);
+    if (!item || campaignProducts.some((product) => product.id === item.id)) return;
+    const product = campaignProductFromItem(item);
+    setCampaignProducts((current) => [...current, product]);
+    setCampaignSelectedIds((current) => [...current, product.id]);
+    setCampaignSubject((current) => current || `New Arrival at INSHUTI st@re: ${product.title}`);
+  };
+  const selectedCampaignProducts = campaignProducts.filter((product) => campaignSelectedIds.includes(product.id));
+  const refreshCampaignHistory = async () => {
+    const response = await fetch('/api/email-campaigns', { credentials: 'same-origin', cache: 'no-store' });
+    const result = await response.json();
+    if (response.ok && Array.isArray(result.campaigns)) setCampaignHistory(result.campaigns);
+  };
+  const submitCampaign = async (mode: 'test' | 'send' | 'schedule') => {
+    if (!selectedCampaignProducts.length) { setCampaignFeedback({ message: 'Select at least one product.', error: true }); return; }
+    setCampaignBusy(true);
+    setCampaignFeedback(null);
+    try {
+      const response = await fetch('/api/email-campaigns', {
+        method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mode, ownerEmail: campaignOwnerEmail, subject: campaignSubject, introMessage: campaignIntro, products: selectedCampaignProducts }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Campaign request failed.');
+      if (mode === 'test') setCampaignFeedback({ message: `Test preview sent to ${campaignOwnerEmail}.` });
+      else if (mode === 'schedule') {
+        const scheduled = new Date(result.scheduledFor);
+        setCampaignFeedback({ message: `Morning Drop queued for ${scheduled.toLocaleString('en-RW', { timeZone: 'Africa/Kigali', dateStyle: 'medium', timeStyle: 'short' })} CAT.` });
+        await refreshCampaignHistory();
+      } else {
+        setCampaignFeedback({ message: `Campaign sent to ${result.sent} customer${result.sent === 1 ? '' : 's'}.` });
+        await refreshCampaignHistory();
+        setAnalytics(getStoreAnalytics());
+      }
+      if (campaignOwnerEmail.trim()) window.localStorage.setItem('inshuti-campaign-owner-email', campaignOwnerEmail.trim());
+    } catch (error) {
+      setCampaignFeedback({ message: error instanceof Error ? error.message : 'Campaign request failed.', error: true });
+    } finally {
+      setCampaignBusy(false);
+    }
+  };
   const filteredMediaItems = useMemo(() => {
     const search = mediaSearch.trim().toLowerCase();
     return mediaItems.filter((item) => {
@@ -425,6 +505,7 @@ export default function AdminPage() {
     const currentProduct = analytics.customStoreItems.find((product) => product.id === editingProductId);
     const id = editingProductId || `store-product-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     let publishedImageUrl = productImage.startsWith('data:') ? '' : productImage;
+    let campaignDraft: CampaignProduct | null = null;
     try {
       if (editingProductSource === 'default' && !isHero) {
         const override: DefaultStoreProductOverride = {
@@ -455,40 +536,18 @@ export default function AdminPage() {
         const cloudItem = await upsertCloudStoreItem({ id, slotType: isHero ? 'hero_banner' : 'product', payload: item, imageDataUrl: productImage });
         if (typeof cloudItem?.imageUrl === 'string') publishedImageUrl = cloudItem.imageUrl;
         saveStoreProduct(item);
-      }
-      let notificationMessage = '';
-      if (!editingProductId && !isHero && notifyNewProduct) {
-        try {
-          const response = await fetch('/api/notify-new-product', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, title: productTitle.trim(), category: `${productDepartment} · ${productSubtitle.trim()}`, priceRwf, imageUrl: publishedImageUrl }) });
-          const result = await response.json();
-          if (!response.ok) throw new Error(result.error || 'Could not notify customers.');
-          notificationMessage = ` ${result.sent} customer email${result.sent === 1 ? '' : 's'} sent.`;
-        } catch (error) {
-          notificationMessage = ` Product saved, but notification failed: ${error instanceof Error ? error.message : 'unknown error'}`;
-        }
+        if (!editingProductId && !isHero && notifyNewProduct) campaignDraft = { id, title: item.title, category: `${item.department} · ${item.subtitle}`, priceRwf, imageUrl: publishedImageUrl };
       }
       refreshAnalytics();
       resetProductForm();
-      setProductFormSuccess((isHero ? 'Hero banner published to the store.' : 'Product published to the top of its store section.') + notificationMessage);
+      setProductFormSuccess(isHero ? 'Hero banner published to the store.' : 'Product published to the top of its store section.');
+      if (campaignDraft) openCampaignProducts([campaignDraft]);
     } catch (error) {
       setProductFormError(error instanceof Error ? error.message : 'The item could not be saved.');
     }
   };
 
-  const notifyExistingProduct = async (item: AdminCatalogItem) => {
-    setNotifyingProductId(item.id);
-    setNotificationResult(null);
-    try {
-      const response = await fetch('/api/notify-new-product', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: item.id, title: item.title, category: `${item.department} · ${item.subtitle || item.section}`, priceRwf: item.priceRwf, imageUrl: item.imageDataUrl }) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Could not notify customers.');
-      setNotificationResult({ id: item.id, message: `${result.sent} customer email${result.sent === 1 ? '' : 's'} sent.` });
-    } catch (error) {
-      setNotificationResult({ id: item.id, message: error instanceof Error ? error.message : 'Could not notify customers.', error: true });
-    } finally {
-      setNotifyingProductId(null);
-    }
-  };
+  const notifyExistingProduct = (item: AdminCatalogItem) => openCampaignEditor([item]);
 
   const removeProduct = async (product: AdminCatalogItem) => {
     if (!window.confirm(`Delete “${product.title}” from the store?`)) return;
@@ -657,12 +716,13 @@ export default function AdminPage() {
           ))}
         </section>
 
-        <nav aria-label="Admin dashboard sections" className="mt-6 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-[#111111] p-2 lg:grid-cols-4">
+        <nav aria-label="Admin dashboard sections" className="mt-6 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-[#111111] p-2 lg:grid-cols-5">
           {([
             ['overview', 'Overview & Orders'],
             ['media', 'Media & Store Folders'],
             ['activity', 'Customer Activity'],
             ['customers', 'Customers & Emails'],
+            ['campaigns', 'Email Campaigns'],
           ] as const).map(([key, label]) => <button key={key} type="button" aria-pressed={adminTab === key} onClick={() => setAdminTab(key)} className={`min-h-10 rounded-lg px-3 py-2 text-left text-[10px] font-bold transition sm:text-xs ${adminTab === key ? 'bg-blue-400/15 text-blue-200' : 'text-white/50 hover:bg-white/5 hover:text-white'}`}>{label}</button>)}
         </nav>
 
@@ -761,7 +821,7 @@ export default function AdminPage() {
                 {pagedMediaItems.length ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
                   {pagedMediaItems.map((item, index) => <article key={`${item.source}-${item.id}-${index}`} className="overflow-hidden rounded-lg border border-white/10 bg-black/20">
                     <div className="relative aspect-[3/4] bg-black/30"><img src={item.imageDataUrl} alt={item.title} loading="lazy" className="h-full w-full object-cover object-top" />{item.limitedOffer && <span className="absolute left-2 top-2 rounded bg-white px-2 py-1 text-[8px] font-bold uppercase text-slate-900">Limited Offer</span>}</div>
-                    <div className="p-2.5"><h5 className="truncate text-[11px] font-semibold" title={item.title}>{item.title}</h5><p className="mt-1 truncate text-[9px] text-white/45">{mediaFolderLabel(item)} · {formatRwf(item.priceRwf)}</p>{item.section !== 'Hero Banner' && <><button type="button" disabled={notifyingProductId === item.id} onClick={() => void notifyExistingProduct(item)} className="mt-2 min-h-8 w-full rounded border border-blue-300/20 px-1.5 text-[9px] font-semibold text-blue-100 hover:border-blue-300/50 disabled:opacity-50">{notifyingProductId === item.id ? 'Sending…' : 'Notify Customers'}</button>{notificationResult?.id === item.id && <p role="status" className={`mt-1 text-[9px] ${notificationResult.error ? 'text-rose-200' : 'text-emerald-200'}`}>{notificationResult.message}</p>}</>}<div className="mt-2 grid grid-cols-2 gap-1.5"><button type="button" onClick={() => { setReplaceTarget(item); replaceInputRef.current?.click(); }} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Replace Photo</button><button type="button" onClick={() => openModifyItem(item)} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Modify</button><button type="button" onClick={() => removeProduct(item)} className="col-span-2 min-h-8 rounded border border-rose-300/15 px-1.5 text-[9px] font-semibold text-rose-200/80 hover:border-rose-300/35">Delete</button></div></div>
+                    <div className="p-2.5"><h5 className="truncate text-[11px] font-semibold" title={item.title}>{item.title}</h5><p className="mt-1 truncate text-[9px] text-white/45">{mediaFolderLabel(item)} · {formatRwf(item.priceRwf)}</p>{item.section !== 'Hero Banner' && <button type="button" onClick={() => notifyExistingProduct(item)} className="mt-2 min-h-8 w-full rounded border border-blue-300/20 px-1.5 text-[9px] font-semibold text-blue-100 hover:border-blue-300/50">Preview &amp; Send Email</button>}<div className="mt-2 grid grid-cols-2 gap-1.5"><button type="button" onClick={() => { setReplaceTarget(item); replaceInputRef.current?.click(); }} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Replace Photo</button><button type="button" onClick={() => openModifyItem(item)} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Modify</button><button type="button" onClick={() => removeProduct(item)} className="col-span-2 min-h-8 rounded border border-rose-300/15 px-1.5 text-[9px] font-semibold text-rose-200/80 hover:border-rose-300/35">Delete</button></div></div>
                   </article>)}
                 </div> : <p className="rounded-lg border border-dashed border-white/10 px-4 py-8 text-center text-xs text-white/40">No images found in this folder.</p>}
                 <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4"><button type="button" disabled={mediaPage <= 1} onClick={() => setMediaPage((page) => Math.max(1, page - 1))} className="rounded-lg border border-white/10 px-3 py-2 text-[10px] font-semibold text-white/70 disabled:opacity-30">Previous</button><span className="text-[10px] text-white/45">Page {mediaPage} of {mediaPageCount}</span><button type="button" disabled={mediaPage >= mediaPageCount} onClick={() => setMediaPage((page) => Math.min(mediaPageCount, page + 1))} className="rounded-lg border border-white/10 px-3 py-2 text-[10px] font-semibold text-white/70 disabled:opacity-30">Next</button></div>
@@ -770,6 +830,26 @@ export default function AdminPage() {
           </div>
         </section>
         </>}
+
+        {adminTab === 'campaigns' && <section className="mt-7 rounded-xl border border-white/10 bg-[#111111] p-5 sm:p-6">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">RESEND · CUSTOMER MARKETING</p><h2 className="mt-2 text-xl font-bold">Sent Emails History</h2><p className="mt-1 text-xs text-white/45">Sent campaigns and queued Kigali Morning Drops.</p></div>
+            <button type="button" onClick={() => void refreshCampaignHistory()} className="min-h-9 self-start rounded-lg border border-white/15 px-3 text-[10px] font-semibold text-white/70 hover:border-white/30">Refresh History</button>
+          </div>
+          <div className="space-y-3">
+            {campaignHistory.map((campaign) => {
+              const when = campaign.sent_at || campaign.scheduled_for || campaign.created_at;
+              const products = Array.isArray(campaign.product_payloads) ? campaign.product_payloads : [];
+              return <article key={campaign.id} className="rounded-lg border border-white/10 bg-black/20 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="text-sm font-semibold">{campaign.subject}</p><p className="mt-1 text-[10px] text-white/45">{formatDate(when)} · {campaign.recipient_count} recipients</p></div><span className={`w-fit rounded-full px-2.5 py-1 text-[9px] font-bold uppercase ${campaign.status === 'sent' ? 'bg-emerald-400/10 text-emerald-200' : campaign.status === 'scheduled' ? 'bg-blue-400/10 text-blue-200' : campaign.status === 'failed' ? 'bg-rose-400/10 text-rose-200' : 'bg-amber-400/10 text-amber-200'}`}>{campaign.status}</span></div>
+                <p className="mt-3 line-clamp-2 text-xs leading-5 text-white/65">{campaign.intro_message}</p>
+                <p className="mt-2 text-[10px] text-white/40">{products.length ? products.map((product) => product.title).join(' · ') : (campaign.product_ids || []).join(', ')}</p>
+                {campaign.status === 'scheduled' && campaign.scheduled_for && <p className="mt-2 text-[10px] font-semibold text-blue-200">Morning Drop · {new Date(campaign.scheduled_for).toLocaleString('en-RW', { timeZone: 'Africa/Kigali', dateStyle: 'medium', timeStyle: 'short' })} CAT</p>}
+              </article>;
+            })}
+            {!campaignHistory.length && <p className="rounded-lg border border-dashed border-white/10 py-10 text-center text-sm text-white/45">No customer campaigns yet. Use “Preview &amp; Send Email” on a product to start one.</p>}
+          </div>
+        </section>}
 
         {adminTab === 'overview' && <>
         <section className="mt-7 rounded-xl border border-white/10 bg-[#111111] p-5 sm:p-6">
@@ -913,6 +993,28 @@ export default function AdminPage() {
           </div>
         </section>
         </>}
+
+        {campaignOpen && <div role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCampaignOpen(false); }} className="fixed inset-0 z-[1300] flex justify-end bg-black/75 backdrop-blur-sm">
+          <section role="dialog" aria-modal="true" aria-labelledby="campaign-editor-title" className="flex h-full w-full max-w-6xl flex-col overflow-hidden border-l border-white/10 bg-[#090909] text-white shadow-2xl">
+            <header className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4 sm:px-7"><div><p className="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-300">INSHUTI ST@RE · EMAIL STUDIO</p><h2 id="campaign-editor-title" className="mt-1 text-xl font-bold sm:text-2xl">New Product Email Campaign</h2><p className="mt-1 text-xs text-white/45">Edit the message, review the live email, then test, send, or queue your drop.</p></div><button type="button" onClick={() => setCampaignOpen(false)} aria-label="Close email campaign editor" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white">×</button></header>
+            <div className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-4 sm:p-6 lg:grid-cols-2">
+              <div className="space-y-4">
+                <label className="block text-xs font-semibold text-white/75">Subject line<input value={campaignSubject} onChange={(event) => setCampaignSubject(event.target.value)} maxLength={180} className="mt-2 h-11 w-full rounded-lg border border-white/15 bg-black/30 px-3 text-sm text-white outline-none focus:border-blue-300" /></label>
+                <label className="block text-xs font-semibold text-white/75">Personal message / intro<textarea value={campaignIntro} onChange={(event) => setCampaignIntro(event.target.value)} rows={5} maxLength={3000} className="mt-2 w-full resize-y rounded-lg border border-white/15 bg-black/30 px-3 py-3 text-sm leading-6 text-white outline-none focus:border-blue-300" /></label>
+                <label className="block text-xs font-semibold text-white/75">Owner email for test send<input type="email" value={campaignOwnerEmail} onChange={(event) => setCampaignOwnerEmail(event.target.value)} placeholder="you@example.com" className="mt-2 h-11 w-full rounded-lg border border-white/15 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-white/35 focus:border-blue-300" /></label>
+                <label className="block text-xs font-semibold text-white/75">Add another store product<select value="" onChange={(event) => addCampaignProduct(event.target.value)} className="mt-2 h-11 w-full rounded-lg border border-white/15 bg-black/30 px-3 text-sm text-white outline-none focus:border-blue-300"><option value="">Choose a product…</option>{catalogueItems.filter((item) => item.section !== 'Hero Banner' && !campaignProducts.some((product) => product.id === item.id)).map((item) => <option key={item.id} value={item.id}>{item.title} · {formatRwf(item.priceRwf)}</option>)}</select></label>
+                <fieldset className="space-y-2"><legend className="mb-2 text-xs font-semibold text-white/75">Products in this email</legend>{campaignProducts.map((product) => <label key={product.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/10 bg-black/20 p-2.5"><input type="checkbox" checked={campaignSelectedIds.includes(product.id)} onChange={(event) => setCampaignSelectedIds((current) => event.target.checked ? [...current, product.id] : current.filter((id) => id !== product.id))} className="h-4 w-4 shrink-0 accent-blue-500" /><img src={product.imageUrl || '/Grey%20color%20polo.png'} alt="" className="h-14 w-11 rounded object-cover object-top" /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{product.title}</span><span className="mt-1 block truncate text-[10px] text-white/45">{product.category} · {formatRwf(product.priceRwf)}</span></span></label>)}</fieldset>
+              </div>
+              <div className="min-w-0">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">Live Preview</p>
+                <div className="mx-auto max-w-[560px] rounded-xl bg-zinc-100 p-3 sm:p-5"><article className="rounded-lg bg-white p-5 text-slate-900 sm:p-7"><p className="text-xs font-black tracking-[0.16em]">INSHUTI <span className="font-normal italic">st@re</span></p><h3 className="mt-6 text-xl font-bold leading-tight">{campaignSubject || 'Your campaign subject'}</h3><p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-600">{campaignIntro}</p>{selectedCampaignProducts.map((product) => <div key={product.id} className="mt-6 border-t border-slate-200 pt-5"><img src={product.imageUrl || '/Grey%20color%20polo.png'} alt={product.title} className="aspect-[4/3] w-full rounded-md bg-slate-100 object-cover object-top" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{product.category}</p><p className="mt-1 text-lg font-bold">{product.title}</p><p className="mt-1 text-sm font-semibold">{formatRwf(product.priceRwf)}</p><a href={`/shop?product=${encodeURIComponent(product.id)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded bg-slate-900 px-4 py-3 text-[9px] font-bold tracking-wider text-white">CHECK OUT NEW ARRIVAL</a></div>)}<p className="mt-6 border-t border-slate-200 pt-4 text-[9px] text-slate-400">Made with care in Rwanda · Unsubscribe</p></article></div>
+                <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-blue-300/20 bg-blue-400/5 p-3 text-xs leading-5 text-white/75"><input type="checkbox" checked={scheduleMorningDrop} onChange={(event) => setScheduleMorningDrop(event.target.checked)} className="mt-0.5 h-4 w-4 accent-blue-500" /><span><strong className="text-white">Schedule for Morning Drop (8:00 AM CAT)</strong><span className="mt-0.5 block text-[10px] text-white/45">Queue for the next Kigali morning drop. Scheduled times use Africa/Kigali.</span></span></label>
+                {campaignFeedback && <p role={campaignFeedback.error ? 'alert' : 'status'} className={`mt-3 rounded-lg border px-3 py-2 text-xs ${campaignFeedback.error ? 'border-rose-300/20 bg-rose-400/10 text-rose-200' : 'border-emerald-300/20 bg-emerald-400/10 text-emerald-200'}`}>{campaignFeedback.message}</p>}
+              </div>
+            </div>
+            <footer className="flex flex-col gap-2 border-t border-white/10 bg-[#090909] p-4 sm:flex-row sm:justify-end sm:px-6"><button type="button" disabled={campaignBusy || !campaignOwnerEmail.trim()} onClick={() => void submitCampaign('test')} className="min-h-11 rounded-lg border border-white/15 px-4 text-xs font-semibold text-white/80 hover:border-white/30 disabled:opacity-40">{campaignBusy ? 'Working…' : 'Send Test to My Email'}</button><button type="button" disabled={campaignBusy || !selectedCampaignProducts.length} onClick={() => void submitCampaign(scheduleMorningDrop ? 'schedule' : 'send')} className="min-h-11 rounded-lg bg-blue-500 px-5 text-xs font-bold text-white hover:bg-blue-400 disabled:opacity-50">{campaignBusy ? 'Working…' : scheduleMorningDrop ? 'Schedule Morning Drop (8:00 AM CAT)' : 'Send to Customers Now'}</button></footer>
+          </section>
+        </div>}
 
         {modifyItem && <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/75 p-3 sm:p-6" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModifyItem(null); }}>
           <section role="dialog" aria-modal="true" aria-labelledby="modify-media-title" className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-white/10 bg-[#111111] p-5 shadow-2xl sm:p-6">
