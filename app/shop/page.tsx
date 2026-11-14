@@ -159,7 +159,7 @@ function PaymentInstructions({ confirmation, copied, onCopy }: { confirmation: P
   if (!confirmation) return null;
   return (
     <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-slate-900" role="status" aria-live="polite">
-      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-800">Payment Instructions</p>
+      <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-800">Payment Instructions</p><InshutiLogo variant="light" sizeClassName="h-3 w-5" /></div>
       <p className="mt-2 text-sm leading-6">Send <strong>{formatPrice(confirmation.totalRwf)}</strong> to MTN MoMo <strong>0793683432</strong> using reference <strong className="font-mono">{confirmation.orderRef}</strong>.</p>
       <button type="button" onClick={onCopy} className="mt-3 rounded-lg bg-emerald-800 px-3 py-2 text-[10px] font-bold tracking-wide text-white transition hover:bg-emerald-900">{copied ? 'COPIED' : 'COPY PAYMENT DETAILS'}</button>
     </div>
@@ -781,7 +781,7 @@ export default function ShopPage() {
             <Link href="/" aria-label="Return to INSHUTI home" className="inline-flex h-9 w-8 shrink-0 items-center justify-center text-slate-600 hover:text-slate-900 sm:w-auto sm:gap-2">
               <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Home</span>
             </Link>
-            <Link href="/" aria-label="INSHUTI store home" className="shrink-0"><InshutiLogo variant="light" /></Link>
+            <Link href="/" aria-label="INSHUTI store home" className="shrink-0"><InshutiLogo variant="light" stacked /></Link>
             <div className="hidden items-center gap-4 self-stretch lg:flex" aria-label="Shop department">
               {(['WOMEN', 'MEN'] as const).map((item) => (
                 <button key={item} type="button" onClick={() => { setDepartment(item); recordActivityPage(`Shop (${item === 'MEN' ? 'Men' : 'Women'})`, '/shop'); }} aria-pressed={department === item} className={`self-stretch border-b-2 px-1 text-xs font-bold tracking-wide transition ${department === item ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-900'}`}>
@@ -816,6 +816,7 @@ export default function ShopPage() {
             </div>
             <label className="flex h-10 min-w-0 items-center gap-2 rounded-full border border-slate-300 bg-slate-50 px-3 text-slate-500 sm:h-11 sm:gap-3 sm:px-4">
               <Search className="h-4 w-4 shrink-0" />
+              <InshutiLogo iconOnly sizeClassName="h-3.5 w-5 shrink-0" className="text-slate-500" />
               <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search styles..." aria-label="Search products" className="w-full min-w-0 bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-500 sm:text-sm" />
             </label>
           </div>
@@ -1139,7 +1140,7 @@ export default function ShopPage() {
         <div role="presentation" onClick={closeProfileModal} className="fixed inset-0 z-[3100] flex items-center justify-center bg-black/60 p-0 backdrop-blur-sm sm:p-4">
           <section role="dialog" aria-modal="true" aria-labelledby="profile-modal-title" onClick={(event) => event.stopPropagation()} className="relative min-h-full max-h-full w-full max-w-none overflow-y-auto rounded-none bg-white p-6 text-slate-900 shadow-2xl md:min-h-0 md:max-w-md md:rounded-2xl md:p-8">
             <button type="button" onClick={closeProfileModal} aria-label="Close sign in" className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full hover:bg-slate-100"><X className="h-4 w-4" /></button>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">INSHUTI ACCOUNT</p>
+            <div className="flex items-center gap-2"><InshutiLogo variant="light" sizeClassName="h-3.5 w-5" /><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">INSHUTI ACCOUNT</p></div>
             <h2 id="profile-modal-title" className="mt-2 text-2xl font-bold">{shopperProfile ? 'Your INSHUTI Account' : authMode === 'signup' ? 'Create your account' : 'Sign in to INSHUTI'}</h2>
             {shopperProfile ? (
               <div className="mt-6">

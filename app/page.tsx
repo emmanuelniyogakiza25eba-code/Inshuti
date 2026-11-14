@@ -508,7 +508,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-[1000] border-b border-gray-200 bg-white/95 backdrop-blur-md">
         <div className="relative mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8">
           <a href="#top" aria-label="INSHUTI store home" className="inline-flex items-center">
-            <InshutiLogo variant="light" />
+            <InshutiLogo variant="light" stacked />
           </a>
 
           <nav className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-8 text-xs font-medium text-slate-600 lg:flex">
@@ -896,7 +896,7 @@ export default function LandingPage() {
       <footer data-reveal className="border-t border-gray-200 bg-white">
         <div className="mx-auto grid max-w-7xl gap-9 px-5 py-10 sm:px-8 md:grid-cols-[1fr_auto_auto] md:items-center">
           <div>
-            <a href="#top" aria-label="INSHUTI store home" className="inline-flex items-center"><InshutiLogo variant="light" className="inshuti-logo--large" /></a>
+            <a href="#top" aria-label="INSHUTI store home" className="inline-flex items-center"><InshutiLogo variant="light" stacked className="inshuti-logo--large" /></a>
             <p className="mt-3 max-w-sm text-xs leading-5 text-slate-500">{isKinyarwanda ? 'Simple, affordable, high-quality fashion for Rwanda’s youth and everyday creators.' : 'Simple, affordable, high-quality fashion for Rwanda’s youth and everyday creators.'}</p>
           </div>
           <nav className="flex flex-wrap gap-x-6 gap-y-3 text-xs text-slate-600">
@@ -943,7 +943,7 @@ export default function LandingPage() {
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 id="order-modal-title" className="text-xl font-semibold text-slate-900">Choose how to order</h2>
+                <div className="flex items-center gap-2"><InshutiLogo variant="light" sizeClassName="h-4 w-6" /><h2 id="order-modal-title" className="text-xl font-semibold text-slate-900">Choose how to order</h2></div>
                 <p className="mt-2 text-sm text-slate-600">Everyday T-Shirt · RWF 12,000</p>
               </div>
               <button type="button" onClick={closeOrderModal} aria-label="Close order options" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:bg-gray-100 hover:text-slate-900">

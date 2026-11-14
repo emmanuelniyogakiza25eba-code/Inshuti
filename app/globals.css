@@ -65,9 +65,11 @@
   white-space: nowrap;
 }
 
+.inshuti-logo--horizontal { flex-direction: row; align-items: center; gap: 0.35rem; }
+.inshuti-logo--stacked { flex-direction: column; align-items: center; gap: 0.05rem; }
 .inshuti-logo--dark { color: #ffffff; }
-.inshuti-logo__top { display: inline-flex; align-items: center; }
-.inshuti-logo__word { font-size: 0.88rem; font-weight: 900; letter-spacing: -0.045em; }
+.inshuti-logo__mark { display: block; flex: none; }
+.inshuti-logo__word { font-family: Georgia, 'Times New Roman', serif; font-size: 0.88rem; font-weight: 900; letter-spacing: -0.045em; }
 .inshuti-logo__signature {
   margin-top: -0.02rem;
   margin-right: 0.12rem;
@@ -80,6 +82,7 @@
 }
 .inshuti-logo--dark .inshuti-logo__signature { color: #93c5fd; }
 .inshuti-logo--large .inshuti-logo__word { font-size: 1.05rem; }
+.inshuti-logo--large .inshuti-logo__mark { width: 2.5rem; height: 1.55rem; }
 .inshuti-logo--large .inshuti-logo__signature { font-size: 1.22rem; }
 :root[data-theme='dark'] .inshuti-logo--light,
 .dark .inshuti-logo--light { color: #ffffff; }

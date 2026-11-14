@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import ActivityTracker from '@/src/hooks/useActivityTracker';
 
 export const metadata: Metadata = {
-  title: 'INSHUTI Apparel | Rwanda',
+  title: 'INSHUTI',
   description: 'Affordable T-shirts and high-quality local apparel for everyday creators across Rwanda.',
 };
 
