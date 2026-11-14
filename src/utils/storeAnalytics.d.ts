@@ -116,7 +116,7 @@ export function logCompletedCheckout(order: Omit<StoreOrder, 'id' | 'timestamp' 
 export function generateOrderReference(): string;
 export function updateStoreOrderStatus(orderId: string, status: OrderStatus): StoreOrder | null;
 export function logRegisteredUser(user: Omit<RegisteredStoreUser, 'id' | 'joinDate' | 'lastSignInAt'>): RegisteredStoreUser;
-export function logNewsletterSubscriber(email: string): NewsletterSubscriber;
+export function logNewsletterSubscriber(email: string, fullName?: string, marketingOptIn?: boolean): NewsletterSubscriber;
 export function startActivitySession(profile?: { name?: string; email?: string } | null): ActivitySession | null;
 export function getActivityDateKey(value?: string | Date): string;
 export function groupActivitySessionsByDay(sessions?: ActivitySession[]): DailyActivitySession[];

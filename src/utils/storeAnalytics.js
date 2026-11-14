@@ -415,16 +415,17 @@ export function logRegisteredUser(user) {
   return entry;
 }
 
-export function logNewsletterSubscriber(email) {
+export function logNewsletterSubscriber(email, fullName = '', marketingOptIn = true) {
   const analytics = getStoreAnalytics();
   const normalizedEmail = email.trim().toLowerCase();
-  const existing = analytics.newsletterSubscribers.find((entry) => entry.email.toLowerCase() === normalizedEmail);
-  if (existing) return existing;
-
-  const entry = { id: createId('subscriber'), email: normalizedEmail, timestamp: new Date().toISOString() };
-  analytics.newsletterSubscribers.unshift(entry);
+  const existingIndex = analytics.newsletterSubscribers.findIndex((entry) => entry.email.toLowerCase() === normalizedEmail);
+  const entry = existingIndex >= 0
+    ? { ...analytics.newsletterSubscribers[existingIndex], fullName: String(fullName || '').trim(), marketingOptIn: Boolean(marketingOptIn) }
+    : { id: createId('subscriber'), email: normalizedEmail, fullName: String(fullName || '').trim(), marketingOptIn: Boolean(marketingOptIn), timestamp: new Date().toISOString() };
+  if (existingIndex >= 0) analytics.newsletterSubscribers[existingIndex] = entry;
+  else analytics.newsletterSubscribers.unshift(entry);
   saveStoreAnalytics(analytics);
-  if (isSupabaseConfigured) void insertCloudSubscriber(entry).catch((error) => console.error('Supabase subscriber sync failed:', error));
+  if (isSupabaseConfigured) void insertCloudSubscriber({ ...entry, fullName: entry.fullName, marketingOptIn: entry.marketingOptIn }).catch((error) => console.error('Supabase subscriber sync failed:', error));
   return entry;
 }
 

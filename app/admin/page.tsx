@@ -144,6 +144,9 @@ export default function AdminPage() {
   const [productOldPrice, setProductOldPrice] = useState('');
   const [productSizes, setProductSizes] = useState<string[]>(clothingSizes);
   const [productLimitedOffer, setProductLimitedOffer] = useState(false);
+  const [notifyNewProduct, setNotifyNewProduct] = useState(true);
+  const [notifyingProductId, setNotifyingProductId] = useState<string | null>(null);
+  const [notificationResult, setNotificationResult] = useState<{ id: string; message: string; error?: boolean } | null>(null);
   const [productImage, setProductImage] = useState('');
   const [productImageName, setProductImageName] = useState('');
   const [productFormError, setProductFormError] = useState('');
@@ -384,6 +387,7 @@ export default function AdminPage() {
     setProductOldPrice('');
     setProductSizes(clothingSizes);
     setProductLimitedOffer(false);
+    setNotifyNewProduct(true);
     setProductImage('');
     setProductImageName('');
     setProductFormError('');
@@ -420,6 +424,7 @@ export default function AdminPage() {
 
     const currentProduct = analytics.customStoreItems.find((product) => product.id === editingProductId);
     const id = editingProductId || `store-product-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    let publishedImageUrl = productImage.startsWith('data:') ? '' : productImage;
     try {
       if (editingProductSource === 'default' && !isHero) {
         const override: DefaultStoreProductOverride = {
@@ -447,14 +452,41 @@ export default function AdminPage() {
           imageDataUrl: productImage,
           ...(currentProduct ? { createdAt: currentProduct.createdAt } : {}),
         };
-        await upsertCloudStoreItem({ id, slotType: isHero ? 'hero_banner' : 'product', payload: item, imageDataUrl: productImage });
+        const cloudItem = await upsertCloudStoreItem({ id, slotType: isHero ? 'hero_banner' : 'product', payload: item, imageDataUrl: productImage });
+        if (typeof cloudItem?.imageUrl === 'string') publishedImageUrl = cloudItem.imageUrl;
         saveStoreProduct(item);
+      }
+      let notificationMessage = '';
+      if (!editingProductId && !isHero && notifyNewProduct) {
+        try {
+          const response = await fetch('/api/notify-new-product', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, title: productTitle.trim(), category: `${productDepartment} · ${productSubtitle.trim()}`, priceRwf, imageUrl: publishedImageUrl }) });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Could not notify customers.');
+          notificationMessage = ` ${result.sent} customer email${result.sent === 1 ? '' : 's'} sent.`;
+        } catch (error) {
+          notificationMessage = ` Product saved, but notification failed: ${error instanceof Error ? error.message : 'unknown error'}`;
+        }
       }
       refreshAnalytics();
       resetProductForm();
-      setProductFormSuccess(isHero ? 'Hero banner published to the store.' : 'Product published to the top of its store section.');
+      setProductFormSuccess((isHero ? 'Hero banner published to the store.' : 'Product published to the top of its store section.') + notificationMessage);
     } catch (error) {
       setProductFormError(error instanceof Error ? error.message : 'The item could not be saved.');
+    }
+  };
+
+  const notifyExistingProduct = async (item: AdminCatalogItem) => {
+    setNotifyingProductId(item.id);
+    setNotificationResult(null);
+    try {
+      const response = await fetch('/api/notify-new-product', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: item.id, title: item.title, category: `${item.department} · ${item.subtitle || item.section}`, priceRwf: item.priceRwf, imageUrl: item.imageDataUrl }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not notify customers.');
+      setNotificationResult({ id: item.id, message: `${result.sent} customer email${result.sent === 1 ? '' : 's'} sent.` });
+    } catch (error) {
+      setNotificationResult({ id: item.id, message: error instanceof Error ? error.message : 'Could not notify customers.', error: true });
+    } finally {
+      setNotifyingProductId(null);
     }
   };
 
@@ -679,6 +711,7 @@ export default function AdminPage() {
                   <div className="mt-2 flex flex-wrap gap-2">{availableStoreSizes.map((size) => <label key={size} className={`inline-flex h-9 min-w-10 cursor-pointer items-center justify-center rounded-md border px-3 text-xs font-semibold ${productSizes.includes(size) ? 'border-blue-300/60 bg-blue-400/15 text-blue-100' : 'border-white/15 text-white/55'}`}><input type="checkbox" checked={productSizes.includes(size)} onChange={(event) => setProductSizes((current) => event.target.checked ? [...current, size] : current.filter((item) => item !== size))} className="sr-only" />{size}</label>)}</div>
                 </fieldset>
                 <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-white/75"><input type="checkbox" checked={productLimitedOffer} onChange={(event) => setProductLimitedOffer(event.target.checked)} className="h-4 w-4 accent-blue-500" />Show Limited Offer badge</label>
+                {!editingProductId && <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-white/75"><input type="checkbox" checked={notifyNewProduct} onChange={(event) => setNotifyNewProduct(event.target.checked)} className="h-4 w-4 accent-blue-500" />Email customers about this new product</label>}
               </>}
 
               {productFormError && <p role="alert" className="rounded-lg border border-rose-300/20 bg-rose-400/10 px-3 py-2 text-xs text-rose-200">{productFormError}</p>}
@@ -728,7 +761,7 @@ export default function AdminPage() {
                 {pagedMediaItems.length ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
                   {pagedMediaItems.map((item, index) => <article key={`${item.source}-${item.id}-${index}`} className="overflow-hidden rounded-lg border border-white/10 bg-black/20">
                     <div className="relative aspect-[3/4] bg-black/30"><img src={item.imageDataUrl} alt={item.title} loading="lazy" className="h-full w-full object-cover object-top" />{item.limitedOffer && <span className="absolute left-2 top-2 rounded bg-white px-2 py-1 text-[8px] font-bold uppercase text-slate-900">Limited Offer</span>}</div>
-                    <div className="p-2.5"><h5 className="truncate text-[11px] font-semibold" title={item.title}>{item.title}</h5><p className="mt-1 truncate text-[9px] text-white/45">{mediaFolderLabel(item)} · {formatRwf(item.priceRwf)}</p><div className="mt-2 grid grid-cols-2 gap-1.5"><button type="button" onClick={() => { setReplaceTarget(item); replaceInputRef.current?.click(); }} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Replace Photo</button><button type="button" onClick={() => openModifyItem(item)} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Modify</button><button type="button" onClick={() => removeProduct(item)} className="col-span-2 min-h-8 rounded border border-rose-300/15 px-1.5 text-[9px] font-semibold text-rose-200/80 hover:border-rose-300/35">Delete</button></div></div>
+                    <div className="p-2.5"><h5 className="truncate text-[11px] font-semibold" title={item.title}>{item.title}</h5><p className="mt-1 truncate text-[9px] text-white/45">{mediaFolderLabel(item)} · {formatRwf(item.priceRwf)}</p>{item.section !== 'Hero Banner' && <><button type="button" disabled={notifyingProductId === item.id} onClick={() => void notifyExistingProduct(item)} className="mt-2 min-h-8 w-full rounded border border-blue-300/20 px-1.5 text-[9px] font-semibold text-blue-100 hover:border-blue-300/50 disabled:opacity-50">{notifyingProductId === item.id ? 'Sending…' : 'Notify Customers'}</button>{notificationResult?.id === item.id && <p role="status" className={`mt-1 text-[9px] ${notificationResult.error ? 'text-rose-200' : 'text-emerald-200'}`}>{notificationResult.message}</p>}</>}<div className="mt-2 grid grid-cols-2 gap-1.5"><button type="button" onClick={() => { setReplaceTarget(item); replaceInputRef.current?.click(); }} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Replace Photo</button><button type="button" onClick={() => openModifyItem(item)} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Modify</button><button type="button" onClick={() => removeProduct(item)} className="col-span-2 min-h-8 rounded border border-rose-300/15 px-1.5 text-[9px] font-semibold text-rose-200/80 hover:border-rose-300/35">Delete</button></div></div>
                   </article>)}
                 </div> : <p className="rounded-lg border border-dashed border-white/10 px-4 py-8 text-center text-xs text-white/40">No images found in this folder.</p>}
                 <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4"><button type="button" disabled={mediaPage <= 1} onClick={() => setMediaPage((page) => Math.max(1, page - 1))} className="rounded-lg border border-white/10 px-3 py-2 text-[10px] font-semibold text-white/70 disabled:opacity-30">Previous</button><span className="text-[10px] text-white/45">Page {mediaPage} of {mediaPageCount}</span><button type="button" disabled={mediaPage >= mediaPageCount} onClick={() => setMediaPage((page) => Math.min(mediaPageCount, page + 1))} className="rounded-lg border border-white/10 px-3 py-2 text-[10px] font-semibold text-white/70 disabled:opacity-30">Next</button></div>

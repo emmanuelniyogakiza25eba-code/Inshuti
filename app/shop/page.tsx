@@ -307,6 +307,7 @@ export default function ShopPage() {
   const [reviewMessage, setReviewMessage] = useState('');
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterSubmitted, setNewsletterSubmitted] = useState(false);
+  const [marketingOptIn, setMarketingOptIn] = useState(true);
   const profileSubmittedRef = useRef(false);
 
   const bagCount = bagItems.length;
@@ -320,7 +321,7 @@ export default function ShopPage() {
     .map((record) => toShopProduct({ ...record, ...catalogOverrides.productOverrides[record.id] })), [catalogOverrides]);
   const savedProducts = useMemo(() => [...visibleDefaultProducts, ...uploadedProducts].filter((product) => savedProductIds.includes(product.id)), [savedProductIds, uploadedProducts, visibleDefaultProducts]);
 
-  const applyAuthenticatedUser = (user: User | null) => {
+  const applyAuthenticatedUser = (user: User | null, accessToken?: string) => {
     if (!user) {
       setShopperProfile(null);
       setProfileNameDraft('');
@@ -349,6 +350,15 @@ export default function ShopPage() {
     setCheckoutEmail(profile.email);
     window.localStorage.setItem('inshuti-shop-profile', JSON.stringify(profile));
     if (profile.email) logRegisteredUser({ fullName: profile.name, email: profile.email, stylePreference: profile.preference });
+    if (accessToken) {
+      const pendingOptIn = window.sessionStorage.getItem('inshuti-auth-marketing-opt-in');
+      window.sessionStorage.removeItem('inshuti-auth-marketing-opt-in');
+      void fetch('/api/customer/profile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ fullName: profile.name, ...(pendingOptIn === 'true' || pendingOptIn === 'false' ? { marketingOptIn: pendingOptIn === 'true' } : {}) }),
+      }).catch((error) => console.error('Customer email preferences could not be synced:', error));
+    }
     updateActivityIdentity(profile.name, profile.email);
   };
 
@@ -387,14 +397,14 @@ export default function ShopPage() {
           email,
           password: profilePassword,
           options: {
-            data: { full_name: profileNameDraft.trim(), style_preference: profilePreferenceDraft },
+            data: { full_name: profileNameDraft.trim(), style_preference: profilePreferenceDraft, marketing_opt_in: marketingOptIn },
             emailRedirectTo: `${window.location.origin}/shop`,
           },
         });
         if (error) throw error;
         profileSubmittedRef.current = true;
         if (data.session && data.user) {
-          applyAuthenticatedUser(data.user);
+          applyAuthenticatedUser(data.user, data.session.access_token);
           setProfileModalOpen(false);
         } else {
           setAuthMessage('Account created. Check your email to confirm your address, then sign in.');
@@ -406,7 +416,7 @@ export default function ShopPage() {
 
       const { data, error } = await supabase.auth.signInWithPassword({ email, password: profilePassword });
       if (error) throw error;
-      if (data.user) applyAuthenticatedUser(data.user);
+      if (data.user) applyAuthenticatedUser(data.user, data.session?.access_token);
       profileSubmittedRef.current = true;
       setProfileModalOpen(false);
       setProfilePassword('');
@@ -425,7 +435,10 @@ export default function ShopPage() {
       return;
     }
     setAuthBusy(true);
-    if (authMode === 'signup') window.sessionStorage.setItem('inshuti-auth-preference-draft', profilePreferenceDraft);
+    if (authMode === 'signup') {
+      window.sessionStorage.setItem('inshuti-auth-preference-draft', profilePreferenceDraft);
+      window.sessionStorage.setItem('inshuti-auth-marketing-opt-in', String(marketingOptIn));
+    }
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -433,10 +446,12 @@ export default function ShopPage() {
       });
       if (error) {
         window.sessionStorage.removeItem('inshuti-auth-preference-draft');
+        window.sessionStorage.removeItem('inshuti-auth-marketing-opt-in');
         setAuthError(error.message);
       }
     } catch (error) {
       window.sessionStorage.removeItem('inshuti-auth-preference-draft');
+      window.sessionStorage.removeItem('inshuti-auth-marketing-opt-in');
       setAuthError(error instanceof Error ? error.message : 'Google sign-in could not be started.');
     } finally {
       setAuthBusy(false);
@@ -547,16 +562,30 @@ export default function ShopPage() {
     if (!supabase) return;
     let active = true;
     void supabase.auth.getSession().then(({ data }) => {
-      if (active) applyAuthenticatedUser(data.session?.user || null);
+      if (active) applyAuthenticatedUser(data.session?.user || null, data.session?.access_token);
     }).catch((error) => console.error('Could not restore INSHUTI customer session:', error));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (active) applyAuthenticatedUser(session?.user || null);
+      if (active) applyAuthenticatedUser(session?.user || null, session?.access_token);
     });
     return () => {
       active = false;
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!shopDataLoaded) return;
+    const requestedId = new URLSearchParams(window.location.search).get('product');
+    if (!requestedId) return;
+    const product = [...visibleDefaultProducts, ...uploadedProducts].find((item) => item.id === requestedId || item.id.startsWith(`uploaded-${requestedId}-`));
+    if (!product) return;
+    setDepartment(product.department);
+    setSelectedProduct(product);
+    setSelectedImage(product.image);
+    setSelectedSize('');
+    setSizeError(false);
+    recordActivityPage(`Product: ${product.name}`, '/shop');
+  }, [shopDataLoaded, uploadedProducts, visibleDefaultProducts]);
 
   useEffect(() => {
     if (!shopperProfile) return;
@@ -877,13 +906,15 @@ export default function ShopPage() {
             onSubmit={(event) => {
               event.preventDefault();
               if (newsletterEmail.trim()) {
-                logNewsletterSubscriber(newsletterEmail);
+                if (!marketingOptIn) return;
+                logNewsletterSubscriber(newsletterEmail, shopperProfile?.name || '', true);
                 setNewsletterSubmitted(true);
               }
             }}
           >
             <label className="sr-only" htmlFor="shop-newsletter-email">Email address</label>
             <input id="shop-newsletter-email" type="email" required value={newsletterEmail} onChange={(event) => { setNewsletterEmail(event.target.value); setNewsletterSubmitted(false); }} placeholder="Enter your email address" className="h-12 min-w-0 flex-1 border border-slate-400 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-slate-900" />
+            <label className="flex items-center gap-2 text-left text-xs text-slate-700 sm:col-span-2"><input type="checkbox" required checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} className="h-4 w-4 accent-slate-900" />Email me about new arrivals &amp; exclusive drops</label>
             <button type="submit" className="h-12 bg-slate-900 px-7 text-xs font-bold tracking-[0.15em] text-white transition hover:bg-slate-700">SIGN UP</button>
           </form>
           {newsletterSubmitted && <p role="status" className="mt-3 text-sm text-slate-700">Thanks for your interest in INSHUTI updates.</p>}
@@ -1143,6 +1174,7 @@ export default function ShopPage() {
                   {authMode === 'signup' && <>
                     <label htmlFor="shopper-preference" className="mt-4 block text-xs font-semibold">Style preference</label>
                     <select id="shopper-preference" value={profilePreferenceDraft} onChange={(event) => setProfilePreferenceDraft(event.target.value as Department)} className="mt-2 h-11 w-full border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900"><option value="WOMEN">Women</option><option value="MEN">Men</option></select>
+                    <label className="mt-4 flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} className="h-4 w-4 accent-slate-900" />Email me about new arrivals &amp; exclusive drops</label>
                   </>}
                   {authError && <p role="alert" className="mt-3 text-xs text-rose-700">{authError}</p>}
                   {authMessage && <p role="status" className="mt-3 text-xs text-emerald-700">{authMessage}</p>}
