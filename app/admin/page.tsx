@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Download, ImagePlus, LockKeyhole, LogOut, Pencil, Search, Trash2, TrendingUp, Users, Wallet, Shirt } from 'lucide-react';
-import { HOME_PAGE_IMAGE_SLOTS, clearActivitySessions, deleteActivitySession, deleteCloudDefaultStoreProduct, deleteCloudStoreItem, deleteDefaultStoreProduct, deleteStoreProduct, fetchCloudAdminData, fetchCloudStoreItems, getStoreAnalytics, isSupabaseConfigured, resetHomePageImage, restoreCloudDefaultStoreCatalog, restoreDefaultStoreCatalog, saveDefaultProductOverride, saveHomePageImage, saveStoreProduct, syncDefaultProductOverrideToCloud, updateStoreOrderStatus, upsertCloudStoreItem, type ActivitySession, type DefaultStoreProductOverride, type HomePageImageSlot, type OrderStatus, type StoreAnalytics, type StoreOrder, type StoreProductDepartment, type StoreProductSection } from '@/src/utils/storeAnalytics';
+import { HOME_PAGE_IMAGE_SLOTS, clearActivitySessions, deleteActivitySessions, deleteCloudDefaultStoreProduct, deleteCloudStoreItem, deleteDefaultStoreProduct, deleteStoreProduct, fetchCloudAdminData, fetchCloudStoreItems, getActivityDateKey, getStoreAnalytics, groupActivitySessionsByDay, isSupabaseConfigured, resetHomePageImage, restoreCloudDefaultStoreCatalog, restoreDefaultStoreCatalog, saveDefaultProductOverride, saveHomePageImage, saveStoreProduct, syncDefaultProductOverrideToCloud, updateStoreOrderStatus, upsertCloudStoreItem, type ActivitySession, type DefaultStoreProductOverride, type HomePageImageSlot, type OrderStatus, type StoreAnalytics, type StoreOrder, type StoreProductDepartment, type StoreProductSection } from '@/src/utils/storeAnalytics';
 import { defaultStoreProducts } from '@/src/utils/defaultStoreCatalog';
 import InshutiLogo from '@/src/components/InshutiLogo';
 
@@ -79,7 +79,16 @@ function formatDate(value: string) {
 function formatDuration(seconds: number) {
   const wholeSeconds = Math.max(0, Math.floor(seconds));
   const minutes = Math.floor(wholeSeconds / 60);
+  const hours = Math.floor(minutes / 60);
+  if (hours) return `${hours}h ${minutes % 60}m`;
   return `${minutes}m ${wholeSeconds % 60}s`;
+}
+
+function formatActivityDate(dateKey: string) {
+  if (dateKey === getActivityDateKey()) return 'Today';
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(year, month - 1, day)));
 }
 
 function initials(name: string) {
@@ -303,14 +312,12 @@ export default function AdminPage() {
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, 12), [analytics.orders]);
 
-  const recentActivity = useMemo(() => analytics.activitySessions
-    .slice()
-    .sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()), [analytics.activitySessions]);
+  const recentActivity = useMemo(() => groupActivitySessionsByDay(analytics.activitySessions), [analytics.activitySessions]);
 
   const filteredActivity = useMemo(() => {
     const search = activitySearch.trim().toLowerCase();
     return recentActivity.filter((session) => {
-      const matchesSearch = !search || `${session.visitorName} ${session.visitorEmail}`.toLowerCase().includes(search);
+      const matchesSearch = !search || `${session.visitorName} ${session.visitorEmail} ${session.dateKey} ${formatActivityDate(session.dateKey)}`.toLowerCase().includes(search);
       return matchesSearch && (activityFilter === 'all' || session.frictionEvents.length > 0);
     });
   }, [activityFilter, activitySearch, recentActivity]);
@@ -359,8 +366,8 @@ export default function AdminPage() {
     refreshAnalytics();
   };
 
-  const deleteActivity = (sessionId: string) => {
-    deleteActivitySession(sessionId);
+  const deleteActivity = (sessionIds: string[]) => {
+    deleteActivitySessions(sessionIds);
     refreshAnalytics();
   };
 
@@ -794,13 +801,13 @@ export default function AdminPage() {
             <button type="button" onClick={clearAllActivity} className="inline-flex h-9 shrink-0 items-center justify-center gap-2 self-start rounded-lg border border-white/15 px-3 text-[10px] font-semibold text-white/60 transition hover:border-rose-300/40 hover:text-rose-200"><Trash2 className="h-3.5 w-3.5" /> Clear All Activity Logs</button>
           </div>
           <div className="mb-4 flex flex-col gap-3 lg:flex-row">
-            <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-black/30 px-3 text-white/40"><Search className="h-4 w-4 shrink-0" /><input type="search" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} placeholder="Search customer name or email..." className="w-full bg-transparent text-xs text-white outline-none placeholder:text-white/35" /></label>
+            <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-black/30 px-3 text-white/40"><Search className="h-4 w-4 shrink-0" /><input type="search" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} placeholder="Search customer, email, or date (YYYY-MM-DD)..." className="w-full bg-transparent text-xs text-white outline-none placeholder:text-white/35" /></label>
             <div className="flex rounded-lg border border-white/10 bg-black/20 p-1" aria-label="Filter visitors">
               <button type="button" aria-pressed={activityFilter === 'all'} onClick={() => setActivityFilter('all')} className={`rounded-md px-3 py-2 text-[10px] font-semibold transition ${activityFilter === 'all' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'}`}>All Visitors</button>
               <button type="button" aria-pressed={activityFilter === 'friction'} onClick={() => setActivityFilter('friction')} className={`rounded-md px-3 py-2 text-[10px] font-semibold transition ${activityFilter === 'friction' ? 'bg-rose-400/15 text-rose-200' : 'text-white/50 hover:text-white'}`}>Has Friction Alerts Only</button>
             </div>
           </div>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-white/45"><span>Showing {firstActivityResult}–{lastActivityResult} of {filteredActivity.length} visitors</span><span>{analytics.activitySessions.length.toLocaleString()} total visitor logs</span></div>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-white/45"><span>Showing {firstActivityResult}–{lastActivityResult} of {filteredActivity.length} daily visitor records</span><span>{recentActivity.length.toLocaleString()} date-specific visitor logs</span></div>
           {visibleActivity.length ? (
             <div className="space-y-3">
               {visibleActivity.map((session) => {
@@ -808,10 +815,10 @@ export default function AdminPage() {
                 const pageBadges = activityPageBadges(session);
                 return (
                   <article key={session.id} className="relative grid gap-4 rounded-lg border border-white/10 bg-black/20 p-4 pr-12 lg:grid-cols-[190px_90px_minmax(180px,1fr)_minmax(210px,0.9fr)] lg:items-start">
-                    <button type="button" onClick={() => deleteActivity(session.id)} aria-label={`Delete activity log for ${session.visitorName}`} title="Delete activity log" className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-md text-white/35 transition hover:bg-rose-400/10 hover:text-rose-200"><Trash2 className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => deleteActivity(session.sessionIds)} aria-label={`Delete activity log for ${session.visitorName} on ${formatActivityDate(session.dateKey)}`} title="Delete this visitor's activity for this date" className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-md text-white/35 transition hover:bg-rose-400/10 hover:text-rose-200"><Trash2 className="h-4 w-4" /></button>
                     <div className="flex items-center gap-3">
                       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${isGuest ? 'bg-white/10 text-white/65' : 'bg-blue-400/20 text-blue-200'}`}>{isGuest ? 'GV' : initials(session.visitorName)}</span>
-                      <div className="min-w-0"><p className="truncate text-xs font-semibold">{session.visitorName}</p><p className="truncate text-[10px] text-white/40">{session.visitorEmail || 'Guest session'}</p></div>
+                      <div className="min-w-0"><p className="truncate text-xs font-semibold">{session.visitorName}</p><p className="truncate text-[10px] text-white/40">{session.visitorEmail || 'Guest session'}</p><p className="mt-1 text-[10px] font-semibold text-blue-200">{formatActivityDate(session.dateKey)} <span className="text-white/40">·</span> {session.visitCount} {session.visitCount === 1 ? 'visit' : 'visits'} on this date</p></div>
                     </div>
                     <div><p className="text-[9px] font-bold uppercase tracking-wider text-white/40">Time Spent</p><p className="mt-1 text-xs font-semibold">{formatDuration(session.activeSeconds)}</p></div>
                     <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wider text-white/40">Pages &amp; Products Viewed</p><div className="mt-2 flex flex-wrap gap-1.5">{pageBadges.length ? pageBadges.map(([label, count]) => <span key={label} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] leading-4 text-white/75">{label} ({count}x)</span>) : <span className="text-xs text-white/40">No main pages recorded</span>}</div></div>

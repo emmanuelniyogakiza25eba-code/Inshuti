@@ -5,6 +5,7 @@ const STORAGE_KEY = 'inshuti-store-analytics';
 const CUSTOM_STORE_ITEMS_KEY = 'inshuti-store-products';
 const HOME_PAGE_IMAGES_KEY = 'inshuti-home-page-images';
 const ACTIVITY_SESSION_KEY = 'inshuti-activity-session-id';
+const ACTIVITY_VISITOR_KEY = 'inshuti-activity-visitor-id';
 
 export const HOME_PAGE_IMAGE_SLOTS = [
   { id: 'home-hero-showcase-1', label: 'Home Hero Showcase 1', description: 'INSHUTI garment 1 — main top showcase photo', defaultImage: '/Grey%20color%20polo.png' },
@@ -180,7 +181,100 @@ function createId(prefix) {
 }
 
 function cloneSeed() {
-  return JSON.parse(JSON.stringify(seededAnalytics));
+  const seed = JSON.parse(JSON.stringify(seededAnalytics));
+  seed.activitySessions = seed.activitySessions.map(normalizeActivitySession);
+  return seed;
+}
+
+function activityDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Kigali', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  const part = (type) => parts.find((entry) => entry.type === type)?.value || '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+export function getActivityDateKey(value) {
+  return activityDateKey(value || new Date());
+}
+
+function normalizeActivitySession(session) {
+  return {
+    ...session,
+    dateKey: session.dateKey || activityDateKey(session.lastSeenAt || session.startedAt),
+    visitCount: Math.max(1, Number(session.visitCount) || 1),
+  };
+}
+
+export function groupActivitySessionsByDay(sessions = []) {
+  const groups = new Map();
+  for (const rawSession of sessions) {
+    const session = normalizeActivitySession(rawSession);
+    const visitorKey = session.visitorEmail
+      ? `email:${session.visitorEmail.trim().toLowerCase()}`
+      : session.visitorId
+        ? `visitor:${session.visitorId}`
+        : session.visitorName !== 'Guest Visitor'
+          ? `name:${session.visitorName.trim().toLowerCase()}`
+          : `session:${session.id}`;
+    const key = `${visitorKey}::${session.dateKey}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        ...session,
+        id: `daily:${key}`,
+        visitorKey,
+        sessionIds: [],
+        activeSeconds: 0,
+        visitCount: 0,
+        pages: [],
+        frictionEvents: [],
+      };
+      groups.set(key, group);
+    }
+
+    group.sessionIds.push(session.id);
+    group.activeSeconds += Number(session.activeSeconds) || 0;
+    group.visitCount += Math.max(1, Number(session.visitCount) || 1);
+    if (session.startedAt < group.startedAt) group.startedAt = session.startedAt;
+    if (session.lastSeenAt > group.lastSeenAt) {
+      group.lastSeenAt = session.lastSeenAt;
+      group.visitorName = session.visitorName;
+      group.visitorEmail = session.visitorEmail;
+    }
+
+    const pageMap = new Map(group.pages.map((page) => [`${page.label}::${page.path}`, page]));
+    for (const page of session.pages || []) {
+      if (isSectionAnchor(page.label)) continue;
+      const label = cleanPageLabel(page.label);
+      const pageKey = `${label}::${page.path}`;
+      const previous = pageMap.get(pageKey);
+      pageMap.set(pageKey, {
+        label,
+        path: page.path,
+        timestamp: !previous || page.timestamp > previous.timestamp ? page.timestamp : previous.timestamp,
+        visits: (previous?.visits || 0) + (page.visits || 1),
+      });
+    }
+    group.pages = Array.from(pageMap.values());
+
+    const frictionMap = new Map(group.frictionEvents.map((event) => [`${event.label}::${event.detail}`, event]));
+    for (const event of session.frictionEvents || []) {
+      const eventKey = `${event.label}::${event.detail}`;
+      const previous = frictionMap.get(eventKey);
+      frictionMap.set(eventKey, {
+        ...event,
+        timestamp: !previous || event.timestamp > previous.timestamp ? event.timestamp : previous.timestamp,
+        count: (previous?.count || 0) + (event.count || 1),
+      });
+    }
+    group.frictionEvents = Array.from(frictionMap.values());
+  }
+
+  return Array.from(groups.values()).sort((left, right) =>
+    right.dateKey.localeCompare(left.dateKey) || right.lastSeenAt.localeCompare(left.lastSeenAt));
 }
 
 export function getStoreAnalytics() {
@@ -204,7 +298,7 @@ export function getStoreAnalytics() {
         orders: Array.isArray(parsed.orders) ? parsed.orders : [],
         registeredUsers: Array.isArray(parsed.registeredUsers) ? parsed.registeredUsers : [],
         newsletterSubscribers: Array.isArray(parsed.newsletterSubscribers) ? parsed.newsletterSubscribers : [],
-        activitySessions: Array.isArray(parsed.activitySessions) ? parsed.activitySessions : cloneSeed().activitySessions,
+        activitySessions: (Array.isArray(parsed.activitySessions) ? parsed.activitySessions : cloneSeed().activitySessions).map(normalizeActivitySession),
         customStoreItems: Array.isArray(customStoreItems) ? customStoreItems : [],
         catalogOverrides: parsed.catalogOverrides && typeof parsed.catalogOverrides === 'object'
           ? { hiddenProductIds: Array.isArray(parsed.catalogOverrides.hiddenProductIds) ? parsed.catalogOverrides.hiddenProductIds : [], productOverrides: parsed.catalogOverrides.productOverrides && typeof parsed.catalogOverrides.productOverrides === 'object' ? parsed.catalogOverrides.productOverrides : {} }
@@ -353,7 +447,7 @@ function ensureActivitySession(profile) {
   if (typeof window === 'undefined') return null;
   const sessionId = currentActivitySessionId();
   const existing = sessionId && getStoreAnalytics().activitySessions.find((entry) => entry.id === sessionId);
-  return existing ? existing : startActivitySession(profile || storedActivityProfile());
+  return existing && existing.dateKey === activityDateKey() ? existing : startActivitySession(profile || storedActivityProfile());
 }
 
 function isSectionAnchor(label) {
@@ -371,8 +465,19 @@ export function startActivitySession(profile) {
   const existing = savedId && analytics.activitySessions.find((session) => session.id === savedId);
   const visitorName = profile?.name?.trim() || 'Guest Visitor';
   const visitorEmail = profile?.email?.trim().toLowerCase() || '';
+  const dateKey = activityDateKey();
+  const visitorId = existing?.visitorId || getOrCreateActivityVisitorId();
 
-  if (existing) {
+  if (profile && (visitorName !== 'Guest Visitor' || visitorEmail)) {
+    analytics.activitySessions.forEach((session) => {
+      if (session.visitorId === visitorId) {
+        session.visitorName = visitorName;
+        session.visitorEmail = visitorEmail;
+      }
+    });
+  }
+
+  if (existing && existing.dateKey === dateKey) {
     existing.visitorName = visitorName;
     existing.visitorEmail = visitorEmail;
     existing.lastSeenAt = new Date().toISOString();
@@ -383,10 +488,13 @@ export function startActivitySession(profile) {
   const timestamp = new Date().toISOString();
   const session = {
     id: createId('session'),
+    visitorId,
     visitorName,
     visitorEmail,
     startedAt: timestamp,
     lastSeenAt: timestamp,
+    dateKey,
+    visitCount: 1,
     activeSeconds: 0,
     pages: [],
     frictionEvents: [],
@@ -397,6 +505,20 @@ export function startActivitySession(profile) {
   return session;
 }
 
+function getOrCreateActivityVisitorId() {
+  if (typeof window === 'undefined') return '';
+  try {
+    let visitorId = window.localStorage.getItem(ACTIVITY_VISITOR_KEY);
+    if (!visitorId) {
+      visitorId = createId('visitor');
+      window.localStorage.setItem(ACTIVITY_VISITOR_KEY, visitorId);
+    }
+    return visitorId;
+  } catch {
+    return createId('visitor');
+  }
+}
+
 export function updateActivityIdentity(name, email) {
   if (typeof window === 'undefined') return;
   const session = ensureActivitySession({ name, email });
@@ -404,8 +526,14 @@ export function updateActivityIdentity(name, email) {
   const analytics = getStoreAnalytics();
   const storedSession = analytics.activitySessions.find((entry) => entry.id === session.id);
   if (!storedSession) return;
-  storedSession.visitorName = name.trim() || 'Guest Visitor';
-  storedSession.visitorEmail = email.trim().toLowerCase();
+  const visitorName = name.trim() || 'Guest Visitor';
+  const visitorEmail = email.trim().toLowerCase();
+  analytics.activitySessions.forEach((entry) => {
+    if (storedSession.visitorId && entry.visitorId === storedSession.visitorId) {
+      entry.visitorName = visitorName;
+      entry.visitorEmail = visitorEmail;
+    }
+  });
   storedSession.lastSeenAt = new Date().toISOString();
   saveStoreAnalytics(analytics);
 }
@@ -477,10 +605,15 @@ export function recordActivityFriction(label, detail) {
 }
 
 export function deleteActivitySession(sessionId) {
+  deleteActivitySessions([sessionId]);
+}
+
+export function deleteActivitySessions(sessionIds) {
   if (typeof window === 'undefined') return;
+  const deletedIds = new Set(sessionIds);
   const analytics = getStoreAnalytics();
-  analytics.activitySessions = analytics.activitySessions.filter((session) => session.id !== sessionId);
-  if (currentActivitySessionId() === sessionId) window.sessionStorage.removeItem(ACTIVITY_SESSION_KEY);
+  analytics.activitySessions = analytics.activitySessions.filter((session) => !deletedIds.has(session.id));
+  if (deletedIds.has(currentActivitySessionId())) window.sessionStorage.removeItem(ACTIVITY_SESSION_KEY);
   saveStoreAnalytics(analytics);
 }
 

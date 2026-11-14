@@ -81,13 +81,23 @@ export type ActivityPage = { label: string; path: string; timestamp: string; vis
 export type ActivityFrictionEvent = { label: string; detail: string; timestamp: string; count?: number };
 export type ActivitySession = {
   id: string;
+  visitorId?: string;
   visitorName: string;
   visitorEmail: string;
   startedAt: string;
   lastSeenAt: string;
+  dateKey?: string;
+  visitCount?: number;
   activeSeconds: number;
   pages: ActivityPage[];
   frictionEvents: ActivityFrictionEvent[];
+};
+export type DailyActivitySession = ActivitySession & {
+  id: string;
+  dateKey: string;
+  visitCount: number;
+  visitorKey: string;
+  sessionIds: string[];
 };
 
 export type StoreAnalytics = {
@@ -108,11 +118,14 @@ export function updateStoreOrderStatus(orderId: string, status: OrderStatus): St
 export function logRegisteredUser(user: Omit<RegisteredStoreUser, 'id' | 'joinDate' | 'lastSignInAt'>): RegisteredStoreUser;
 export function logNewsletterSubscriber(email: string): NewsletterSubscriber;
 export function startActivitySession(profile?: { name?: string; email?: string } | null): ActivitySession | null;
+export function getActivityDateKey(value?: string | Date): string;
+export function groupActivitySessionsByDay(sessions?: ActivitySession[]): DailyActivitySession[];
 export function updateActivityIdentity(name: string, email: string): void;
 export function recordActivityPage(label: string, path: string): void;
 export function recordActiveTime(seconds?: number): void;
 export function recordActivityFriction(label: string, detail: string): void;
 export function deleteActivitySession(sessionId: string): void;
+export function deleteActivitySessions(sessionIds: string[]): void;
 export function clearActivitySessions(): void;
 export function saveStoreProduct(product: Omit<StoreProductRecord, 'createdAt' | 'updatedAt'> & { createdAt?: string }): StoreProductRecord;
 export function deleteStoreProduct(productId: string): void;
