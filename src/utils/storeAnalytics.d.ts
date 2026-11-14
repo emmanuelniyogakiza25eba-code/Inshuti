@@ -56,6 +56,11 @@ export type StoreCatalogOverrides = {
   hiddenProductIds: string[];
   productOverrides: Record<string, DefaultStoreProductOverride>;
 };
+export type HomePageImageSlot = 'home-hero-showcase-1' | 'home-hero-showcase-2' | 'home-hero-showcase-3' | 'home-wardrobe-feature';
+export type HomePageImageSlotInfo = { id: HomePageImageSlot; label: string; description: string; defaultImage: string };
+export const HOME_PAGE_IMAGE_SLOTS: HomePageImageSlotInfo[];
+export const SUPABASE_MEDIA_BUCKET: string;
+export const isSupabaseConfigured: boolean;
 
 export type RegisteredStoreUser = {
   id: string;
@@ -92,6 +97,7 @@ export type StoreAnalytics = {
   activitySessions: ActivitySession[];
   customStoreItems: StoreProductRecord[];
   catalogOverrides: StoreCatalogOverrides;
+  homePageImages: Partial<Record<HomePageImageSlot, string>>;
 };
 
 export function getStoreAnalytics(): StoreAnalytics;
@@ -111,5 +117,14 @@ export function clearActivitySessions(): void;
 export function saveStoreProduct(product: Omit<StoreProductRecord, 'createdAt' | 'updatedAt'> & { createdAt?: string }): StoreProductRecord;
 export function deleteStoreProduct(productId: string): void;
 export function saveDefaultProductOverride(productId: string, override: DefaultStoreProductOverride): void;
+export function syncDefaultProductOverrideToCloud(productId: string, override: DefaultStoreProductOverride): Promise<unknown>;
 export function deleteDefaultStoreProduct(productId: string): void;
 export function restoreDefaultStoreCatalog(): void;
+export function deleteCloudDefaultStoreProduct(productId: string): Promise<void>;
+export function restoreCloudDefaultStoreCatalog(): Promise<void>;
+export function saveHomePageImage(slot: HomePageImageSlot, imageDataUrl: string): Promise<void>;
+export function resetHomePageImage(slot: HomePageImageSlot): Promise<void>;
+export function upsertCloudStoreItem(input: { id: string; slotType: 'product' | 'hero_banner' | 'home_photo'; payload: Record<string, unknown>; imageDataUrl?: string | null; imagePath?: string | null }): Promise<Record<string, unknown> | null>;
+export function deleteCloudStoreItem(id: string): Promise<void>;
+export function fetchCloudStoreItems(): Promise<Pick<StoreAnalytics, 'customStoreItems' | 'catalogOverrides' | 'homePageImages'> | null>;
+export function fetchCloudAdminData(): Promise<{ orders: StoreOrder[]; newsletterSubscribers: NewsletterSubscriber[] } | null>;

@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Download, ImagePlus, LockKeyhole, LogOut, Pencil, Search, Trash2, TrendingUp, Users, Wallet, Shirt } from 'lucide-react';
-import { clearActivitySessions, deleteActivitySession, deleteDefaultStoreProduct, deleteStoreProduct, getStoreAnalytics, restoreDefaultStoreCatalog, saveDefaultProductOverride, saveStoreProduct, updateStoreOrderStatus, type ActivitySession, type DefaultStoreProductOverride, type OrderStatus, type StoreAnalytics, type StoreOrder, type StoreProductDepartment, type StoreProductSection } from '@/src/utils/storeAnalytics';
+import { HOME_PAGE_IMAGE_SLOTS, clearActivitySessions, deleteActivitySession, deleteCloudDefaultStoreProduct, deleteCloudStoreItem, deleteDefaultStoreProduct, deleteStoreProduct, fetchCloudAdminData, fetchCloudStoreItems, getStoreAnalytics, isSupabaseConfigured, resetHomePageImage, restoreCloudDefaultStoreCatalog, restoreDefaultStoreCatalog, saveDefaultProductOverride, saveHomePageImage, saveStoreProduct, syncDefaultProductOverrideToCloud, updateStoreOrderStatus, upsertCloudStoreItem, type ActivitySession, type DefaultStoreProductOverride, type HomePageImageSlot, type OrderStatus, type StoreAnalytics, type StoreOrder, type StoreProductDepartment, type StoreProductSection } from '@/src/utils/storeAnalytics';
 import { defaultStoreProducts } from '@/src/utils/defaultStoreCatalog';
 import InshutiLogo from '@/src/components/InshutiLogo';
 
 const OWNER_ADMIN_PASSWORD = 'INSHUTI2026';
 const ADMIN_SESSION_KEY = 'inshuti-admin-session';
-const emptyAnalytics: StoreAnalytics = { orders: [], registeredUsers: [], newsletterSubscribers: [], activitySessions: [], customStoreItems: [], catalogOverrides: { hiddenProductIds: [], productOverrides: {} } };
+const emptyAnalytics: StoreAnalytics = { orders: [], registeredUsers: [], newsletterSubscribers: [], activitySessions: [], customStoreItems: [], catalogOverrides: { hiddenProductIds: [], productOverrides: {} }, homePageImages: {} };
 const clothingSizes = ['S', 'M', 'L', 'XL', 'XXL'];
 const shoeSizes = ['38', '39', '40', '41', '42', '43', '44', '45'];
 type AdminCatalogItem = {
@@ -117,6 +117,8 @@ export default function AdminPage() {
   const [modifyDepartment, setModifyDepartment] = useState<StoreProductDepartment>('Women');
   const [modifySizes, setModifySizes] = useState<string[]>([]);
   const replaceInputRef = useRef<HTMLInputElement>(null);
+  const homePhotoInputRef = useRef<HTMLInputElement>(null);
+  const homePhotoTargetRef = useRef<HomePageImageSlot | null>(null);
   const [replaceTarget, setReplaceTarget] = useState<AdminCatalogItem | null>(null);
   const [activitySearch, setActivitySearch] = useState('');
   const [activityFilter, setActivityFilter] = useState<'all' | 'friction'>('all');
@@ -138,22 +140,62 @@ export default function AdminPage() {
   const [productFormError, setProductFormError] = useState('');
   const [productFormSuccess, setProductFormSuccess] = useState('');
   const [compressingImage, setCompressingImage] = useState(false);
+  const [cloudSyncActive, setCloudSyncActive] = useState(false);
 
   useEffect(() => {
-    setIsUnlocked(window.sessionStorage.getItem(ADMIN_SESSION_KEY) === 'unlocked');
+    let active = true;
     setAnalytics(getStoreAnalytics());
+    if (isSupabaseConfigured) {
+      fetch('/api/admin/session', { credentials: 'same-origin', cache: 'no-store' }).then((response) => response.json()).then((result) => {
+        if (active) setIsUnlocked(Boolean(result.authenticated));
+      }).catch(() => { if (active) setIsUnlocked(false); });
+    } else {
+      setIsUnlocked(window.sessionStorage.getItem(ADMIN_SESSION_KEY) === 'unlocked');
+    }
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) { setCloudSyncActive(false); return; }
+    let active = true;
+    fetch('/api/supabase/status', { cache: 'no-store' }).then((response) => response.json()).then((result) => {
+      if (active) setCloudSyncActive(Boolean(result.active));
+    }).catch(() => { if (active) setCloudSyncActive(false); });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
     if (!isUnlocked) return;
-    const interval = window.setInterval(() => setAnalytics(getStoreAnalytics()), 10000);
+    void refreshAnalytics();
+    const interval = window.setInterval(() => { void refreshAnalytics(); }, 10000);
     return () => window.clearInterval(interval);
   }, [isUnlocked]);
 
-  const refreshAnalytics = () => setAnalytics(getStoreAnalytics());
+  const refreshAnalytics = async () => {
+    const local = getStoreAnalytics();
+    if (!isSupabaseConfigured) { setAnalytics(local); return; }
+    try {
+      const [catalogue, remoteAdmin] = await Promise.all([fetchCloudStoreItems(), isUnlocked ? fetchCloudAdminData() : Promise.resolve(null)]);
+      setAnalytics({ ...local, ...(catalogue || {}), ...(remoteAdmin || {}) });
+    } catch (error) {
+      console.error('Supabase dashboard refresh failed:', error);
+      if (!isSupabaseConfigured) setAnalytics(local);
+    }
+  };
 
-  const handleLogin = (event: FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isSupabaseConfigured) {
+      try {
+        const response = await fetch('/api/admin/session', { method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ password }) });
+        const result = await response.json();
+        if (!response.ok) { setLoginError(result.error || 'Could not unlock the dashboard.'); return; }
+        setIsUnlocked(true);
+        setPassword('');
+        setLoginError('');
+        return;
+      } catch { setLoginError('Could not connect to the owner sign-in service.'); return; }
+    }
     if (password !== OWNER_ADMIN_PASSWORD) {
       setLoginError('That password did not match. Try again.');
       return;
@@ -168,6 +210,7 @@ export default function AdminPage() {
     window.sessionStorage.removeItem(ADMIN_SESSION_KEY);
     setIsUnlocked(false);
     setPassword('');
+    if (isSupabaseConfigured) void fetch('/api/admin/session', { method: 'DELETE', credentials: 'same-origin' });
   };
 
   const confirmedSales = analytics.orders.filter((order) => order.eventType === 'checkout' || (order.eventType === 'whatsapp_order' && (order.status === 'Paid / Sold' || order.status === 'Delivered')));
@@ -215,8 +258,8 @@ export default function AdminPage() {
     return `${item.folderDepartment} · ${sectionNames[item.section] || item.section}`;
   };
   const mediaFolders = useMemo(() => {
-    const labels = ['Hero Banners', 'Women · The Latest Drops', 'Women · Everyday Essentials', 'Women · Event Wear', 'Women · Shoes', 'Men · The Latest Drops', 'Men · Everyday Essentials', 'Men · Event Wear', 'Men · Shoes'];
-    return [...labels.map((label) => ({ label, count: mediaItems.filter((item) => mediaFolderLabel(item) === label).length })), { label: 'All Images', count: mediaItems.length }];
+    const labels = ['Hero Banners', 'Home Page Photos', 'Women · The Latest Drops', 'Women · Everyday Essentials', 'Women · Event Wear', 'Women · Shoes', 'Men · The Latest Drops', 'Men · Everyday Essentials', 'Men · Event Wear', 'Men · Shoes'];
+    return [...labels.map((label) => ({ label, count: label === 'Home Page Photos' ? HOME_PAGE_IMAGE_SLOTS.length : mediaItems.filter((item) => mediaFolderLabel(item) === label).length })), { label: 'All Images', count: mediaItems.length }];
   }, [mediaItems]);
   const filteredMediaItems = useMemo(() => {
     const search = mediaSearch.trim().toLowerCase();
@@ -294,10 +337,17 @@ export default function AdminPage() {
     URL.revokeObjectURL(blobUrl);
   };
 
-  const changeOrderStatus = (order: StoreOrder) => {
+  const changeOrderStatus = async (order: StoreOrder) => {
     const nextStatus: OrderStatus = order.status === 'Pending MoMo' || order.status === 'Pending'
       ? 'Paid / Sold'
       : order.status === 'Paid / Sold' ? 'Delivered' : 'Pending MoMo';
+    if (isSupabaseConfigured) {
+      try {
+        const response = await fetch('/api/admin/store-data', { method: 'PATCH', headers: { 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ id: order.orderRef || order.id, status: nextStatus }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Could not update the order.');
+      } catch (error) { setProductFormError(error instanceof Error ? error.message : 'Could not update the order status.'); return; }
+    }
     updateStoreOrderStatus(order.id, nextStatus);
     refreshAnalytics();
   };
@@ -348,7 +398,7 @@ export default function AdminPage() {
     }
   };
 
-  const publishProduct = (event: FormEvent<HTMLFormElement>) => {
+  const publishProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setProductFormError('');
     setProductFormSuccess('');
@@ -372,9 +422,10 @@ export default function AdminPage() {
           section: productSection as Exclude<StoreProductSection, 'Hero Banner'>,
           availableSizes: productSizes, limitedOffer: productLimitedOffer, image: productImage, productKind: productType,
         };
+        await syncDefaultProductOverrideToCloud(id, override);
         saveDefaultProductOverride(id, override);
       } else {
-        saveStoreProduct({
+        const item = {
           id,
           title: productTitle.trim(),
           subtitle: productSubtitle.trim(),
@@ -388,7 +439,9 @@ export default function AdminPage() {
           productType,
           imageDataUrl: productImage,
           ...(currentProduct ? { createdAt: currentProduct.createdAt } : {}),
-        });
+        };
+        await upsertCloudStoreItem({ id, slotType: isHero ? 'hero_banner' : 'product', payload: item, imageDataUrl: productImage });
+        saveStoreProduct(item);
       }
       refreshAnalytics();
       resetProductForm();
@@ -398,16 +451,24 @@ export default function AdminPage() {
     }
   };
 
-  const removeProduct = (product: AdminCatalogItem) => {
+  const removeProduct = async (product: AdminCatalogItem) => {
     if (!window.confirm(`Delete “${product.title}” from the store?`)) return;
-    if (product.source === 'default') deleteDefaultStoreProduct(product.id);
-    else deleteStoreProduct(product.id);
+    try {
+      if (product.source === 'default') {
+        await deleteCloudDefaultStoreProduct(product.id);
+        deleteDefaultStoreProduct(product.id);
+      } else {
+        await deleteCloudStoreItem(product.id);
+        deleteStoreProduct(product.id);
+      }
+    } catch (error) { setProductFormError(error instanceof Error ? error.message : 'The item could not be deleted.'); return; }
     if (editingProductId === product.id) resetProductForm();
     refreshAnalytics();
   };
 
-  const restoreCatalogue = () => {
+  const restoreCatalogue = async () => {
     if (!window.confirm('Restore all original built-in clothes and shoes? This will undo default item edits and restore removed items. Uploaded items will remain.')) return;
+    try { await restoreCloudDefaultStoreCatalog(); } catch (error) { setProductFormError(error instanceof Error ? error.message : 'The default catalogue could not be restored.'); return; }
     restoreDefaultStoreCatalog();
     if (editingProductSource === 'default') resetProductForm();
     refreshAnalytics();
@@ -429,20 +490,24 @@ export default function AdminPage() {
     setModifySizes(item.availableSizes || []);
   };
 
-  const saveModifiedItem = () => {
+  const saveModifiedItem = async () => {
     if (!modifyItem || !modifyTitle.trim()) return;
     const price = Number(modifyPrice) || 0;
     try {
       if (modifyItem.source === 'default') {
-        saveDefaultProductOverride(modifyItem.id, {
+        const override: DefaultStoreProductOverride = {
           name: modifyTitle.trim(), price, availableSizes: modifySizes,
           section: modifySection === 'Hero Banner' ? 'The Latest Drops' : modifySection,
           department: modifyDepartment === 'Men' ? 'MEN' : 'WOMEN',
-        });
+        };
+        await syncDefaultProductOverrideToCloud(modifyItem.id, override);
+        saveDefaultProductOverride(modifyItem.id, override);
       } else {
         const original = analytics.customStoreItems.find((item) => item.id === modifyItem.id);
         if (!original) return;
-        saveStoreProduct({ ...original, title: modifyTitle.trim(), priceRwf: price, availableSizes: modifySizes, section: modifySection, department: modifyDepartment });
+        const updated = { ...original, title: modifyTitle.trim(), priceRwf: price, availableSizes: modifySizes, section: modifySection, department: modifyDepartment };
+        await upsertCloudStoreItem({ id: updated.id, slotType: updated.section === 'Hero Banner' ? 'hero_banner' : 'product', payload: updated, imageDataUrl: updated.imageDataUrl });
+        saveStoreProduct(updated);
       }
       refreshAnalytics();
       setModifyItem(null);
@@ -456,16 +521,45 @@ export default function AdminPage() {
     if (!file || !target) return;
     try {
       const imageDataUrl = await compressStoreImage(file);
-      if (target.source === 'default') saveDefaultProductOverride(target.id, { image: imageDataUrl });
+      if (target.source === 'default') {
+        await syncDefaultProductOverrideToCloud(target.id, { image: imageDataUrl });
+        saveDefaultProductOverride(target.id, { image: imageDataUrl });
+      }
       else {
         const original = analytics.customStoreItems.find((item) => item.id === target.id);
-        if (original) saveStoreProduct({ ...original, imageDataUrl });
+        if (original) {
+          const updated = { ...original, imageDataUrl };
+          await upsertCloudStoreItem({ id: target.id, slotType: updated.section === 'Hero Banner' ? 'hero_banner' : 'product', payload: updated, imageDataUrl });
+          saveStoreProduct(updated);
+        }
       }
       refreshAnalytics();
     } catch (error) {
       setProductFormError(error instanceof Error ? error.message : 'The replacement photo could not be saved.');
     } finally {
       setReplaceTarget(null);
+    }
+  };
+
+  const replaceHomePagePhoto = async (file?: File) => {
+    const target = homePhotoTargetRef.current;
+    if (!file || !target) return;
+    try {
+      await saveHomePageImage(target, await compressStoreImage(file));
+      refreshAnalytics();
+    } catch (error) {
+      setProductFormError(error instanceof Error ? error.message : 'The home page photo could not be saved.');
+    } finally {
+      homePhotoTargetRef.current = null;
+    }
+  };
+
+  const resetHomePagePhoto = async (slot: HomePageImageSlot) => {
+    try {
+      await resetHomePageImage(slot);
+      refreshAnalytics();
+    } catch (error) {
+      setProductFormError(error instanceof Error ? error.message : 'The default home page photo could not be restored.');
     }
   };
 
@@ -608,17 +702,30 @@ export default function AdminPage() {
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <button type="button" onClick={() => { setActiveMediaFolder(null); setMediaSearch(''); }} className="min-h-9 self-start rounded-lg border border-white/10 px-3 text-[10px] font-semibold text-white/65 hover:text-white">← All folders</button>
                 <h4 className="text-sm font-bold">{activeMediaFolder}</h4>
-                <span className="text-[10px] text-white/45">{filteredMediaItems.length.toLocaleString()} images</span>
-                <input type="search" value={mediaSearch} onChange={(event) => setMediaSearch(event.target.value)} placeholder="Search this folder..." className="h-9 min-w-0 flex-1 rounded-lg border border-white/15 bg-black/30 px-3 text-xs text-white outline-none placeholder:text-white/35 focus:border-blue-300" />
+                <span className="text-[10px] text-white/45">{activeMediaFolder === 'Home Page Photos' ? HOME_PAGE_IMAGE_SLOTS.length : filteredMediaItems.length.toLocaleString()} images</span>
+                {activeMediaFolder !== 'Home Page Photos' && <input type="search" value={mediaSearch} onChange={(event) => setMediaSearch(event.target.value)} placeholder="Search this folder..." className="h-9 min-w-0 flex-1 rounded-lg border border-white/15 bg-black/30 px-3 text-xs text-white outline-none placeholder:text-white/35 focus:border-blue-300" />}
               </div>
-              <input ref={replaceInputRef} type="file" accept="image/*" className="sr-only" onChange={(event) => { void replacePhoto(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} />
-              {pagedMediaItems.length ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
-                {pagedMediaItems.map((item, index) => <article key={`${item.source}-${item.id}-${index}`} className="overflow-hidden rounded-lg border border-white/10 bg-black/20">
-                  <div className="relative aspect-[3/4] bg-black/30"><img src={item.imageDataUrl} alt={item.title} loading="lazy" className="h-full w-full object-cover object-top" />{item.limitedOffer && <span className="absolute left-2 top-2 rounded bg-white px-2 py-1 text-[8px] font-bold uppercase text-slate-900">Limited Offer</span>}</div>
-                  <div className="p-2.5"><h5 className="truncate text-[11px] font-semibold" title={item.title}>{item.title}</h5><p className="mt-1 truncate text-[9px] text-white/45">{mediaFolderLabel(item)} · {formatRwf(item.priceRwf)}</p><div className="mt-2 grid grid-cols-2 gap-1.5"><button type="button" onClick={() => { setReplaceTarget(item); replaceInputRef.current?.click(); }} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Replace Photo</button><button type="button" onClick={() => openModifyItem(item)} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Modify</button><button type="button" onClick={() => removeProduct(item)} className="col-span-2 min-h-8 rounded border border-rose-300/15 px-1.5 text-[9px] font-semibold text-rose-200/80 hover:border-rose-300/35">Delete</button></div></div>
-                </article>)}
-              </div> : <p className="rounded-lg border border-dashed border-white/10 px-4 py-8 text-center text-xs text-white/40">No images found in this folder.</p>}
-              <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4"><button type="button" disabled={mediaPage <= 1} onClick={() => setMediaPage((page) => Math.max(1, page - 1))} className="rounded-lg border border-white/10 px-3 py-2 text-[10px] font-semibold text-white/70 disabled:opacity-30">Previous</button><span className="text-[10px] text-white/45">Page {mediaPage} of {mediaPageCount}</span><button type="button" disabled={mediaPage >= mediaPageCount} onClick={() => setMediaPage((page) => Math.min(mediaPageCount, page + 1))} className="rounded-lg border border-white/10 px-3 py-2 text-[10px] font-semibold text-white/70 disabled:opacity-30">Next</button></div>
+              {activeMediaFolder === 'Home Page Photos' ? <>
+                <input ref={homePhotoInputRef} type="file" accept="image/*" className="sr-only" onChange={(event) => { void replaceHomePagePhoto(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
+                  {HOME_PAGE_IMAGE_SLOTS.map((slot) => {
+                    const customPhoto = analytics.homePageImages?.[slot.id];
+                    return <article key={slot.id} className="overflow-hidden rounded-lg border border-white/10 bg-black/20">
+                      <div className="relative aspect-[3/4] bg-black/30"><img src={customPhoto || slot.defaultImage} alt={slot.label} loading="lazy" className="h-full w-full object-cover object-top" />{customPhoto && <span className="absolute left-2 top-2 rounded bg-emerald-300 px-2 py-1 text-[8px] font-bold uppercase text-emerald-950">Custom</span>}</div>
+                      <div className="p-2.5"><h5 className="text-[11px] font-semibold leading-4">{slot.label}</h5><p className="mt-1 min-h-8 text-[9px] leading-4 text-white/45">{slot.description}</p><div className="mt-2 grid gap-1.5"><button type="button" onClick={() => { homePhotoTargetRef.current = slot.id; homePhotoInputRef.current?.click(); }} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Replace Photo</button><button type="button" disabled={!customPhoto} onClick={() => resetHomePagePhoto(slot.id)} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/65 hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-35">Reset to Default</button></div></div>
+                    </article>;
+                  })}
+                </div>
+              </> : <>
+                <input ref={replaceInputRef} type="file" accept="image/*" className="sr-only" onChange={(event) => { void replacePhoto(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} />
+                {pagedMediaItems.length ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
+                  {pagedMediaItems.map((item, index) => <article key={`${item.source}-${item.id}-${index}`} className="overflow-hidden rounded-lg border border-white/10 bg-black/20">
+                    <div className="relative aspect-[3/4] bg-black/30"><img src={item.imageDataUrl} alt={item.title} loading="lazy" className="h-full w-full object-cover object-top" />{item.limitedOffer && <span className="absolute left-2 top-2 rounded bg-white px-2 py-1 text-[8px] font-bold uppercase text-slate-900">Limited Offer</span>}</div>
+                    <div className="p-2.5"><h5 className="truncate text-[11px] font-semibold" title={item.title}>{item.title}</h5><p className="mt-1 truncate text-[9px] text-white/45">{mediaFolderLabel(item)} · {formatRwf(item.priceRwf)}</p><div className="mt-2 grid grid-cols-2 gap-1.5"><button type="button" onClick={() => { setReplaceTarget(item); replaceInputRef.current?.click(); }} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Replace Photo</button><button type="button" onClick={() => openModifyItem(item)} className="min-h-8 rounded border border-white/10 px-1.5 text-[9px] font-semibold text-white/70 hover:border-blue-300/40 hover:text-white">Modify</button><button type="button" onClick={() => removeProduct(item)} className="col-span-2 min-h-8 rounded border border-rose-300/15 px-1.5 text-[9px] font-semibold text-rose-200/80 hover:border-rose-300/35">Delete</button></div></div>
+                  </article>)}
+                </div> : <p className="rounded-lg border border-dashed border-white/10 px-4 py-8 text-center text-xs text-white/40">No images found in this folder.</p>}
+                <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4"><button type="button" disabled={mediaPage <= 1} onClick={() => setMediaPage((page) => Math.max(1, page - 1))} className="rounded-lg border border-white/10 px-3 py-2 text-[10px] font-semibold text-white/70 disabled:opacity-30">Previous</button><span className="text-[10px] text-white/45">Page {mediaPage} of {mediaPageCount}</span><button type="button" disabled={mediaPage >= mediaPageCount} onClick={() => setMediaPage((page) => Math.min(mediaPageCount, page + 1))} className="rounded-lg border border-white/10 px-3 py-2 text-[10px] font-semibold text-white/70 disabled:opacity-30">Next</button></div>
+              </>}
             </>}
           </div>
         </section>
@@ -783,7 +890,7 @@ export default function AdminPage() {
           </section>
         </div>}
 
-        <footer className="flex flex-col items-center justify-center gap-3 py-8 text-[10px] text-white/35 sm:flex-row"><InshutiLogo variant="dark" /><span>OWNER DASHBOARD · Local browser analytics</span></footer>
+        <footer className="flex flex-col items-center justify-center gap-3 py-8 text-[10px] text-white/35 sm:flex-row"><InshutiLogo variant="dark" /><span>OWNER DASHBOARD · {cloudSyncActive ? 'Cloud Sync Active · Supabase' : 'Local browser analytics'}</span></footer>
       </div>
     </main>
   );

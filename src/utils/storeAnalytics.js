@@ -1,6 +1,88 @@
+import { isSupabaseConfigured, supabase, supabaseBucket } from '@/src/lib/supabase';
+export { isSupabaseConfigured };
+
 const STORAGE_KEY = 'inshuti-store-analytics';
 const CUSTOM_STORE_ITEMS_KEY = 'inshuti-store-products';
+const HOME_PAGE_IMAGES_KEY = 'inshuti-home-page-images';
 const ACTIVITY_SESSION_KEY = 'inshuti-activity-session-id';
+
+export const HOME_PAGE_IMAGE_SLOTS = [
+  { id: 'home-hero-showcase-1', label: 'Home Hero Showcase 1', description: 'INSHUTI garment 1 — main top showcase photo', defaultImage: '/Grey%20color%20polo.png' },
+  { id: 'home-hero-showcase-2', label: 'Home Hero Showcase 2', description: 'INSHUTI garment 2 — second showcase photo', defaultImage: '/T-shirt%20together.png' },
+  { id: 'home-hero-showcase-3', label: 'Home Hero Showcase 3', description: 'INSHUTI garment 3 — third showcase photo', defaultImage: '/white%20polo%20love.png' },
+  { id: 'home-wardrobe-feature', label: 'Home Wardrobe Feature Photo', description: 'INSHUTI T-shirt — photo beside “Your whole wardrobe upgrade, right in your pocket”', defaultImage: '/Grey%20color%20polo.png' },
+];
+export const SUPABASE_MEDIA_BUCKET = supabaseBucket;
+
+function throwSupabaseError(error) {
+  if (error) throw new Error(error.message || 'Supabase request failed. Check the project key and row-level security policies.');
+}
+
+export async function upsertCloudStoreItem({ id, slotType, payload, imageDataUrl, imagePath: providedImagePath }) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const cloudPayload = { ...payload };
+  delete cloudPayload.imageDataUrl;
+  const response = await fetch('/api/admin/store-items', { method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ id, slotType, payload: cloudPayload, imageDataUrl: imageDataUrl || null, imagePath: providedImagePath || null }) });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || 'Could not sync this item to Supabase.');
+  return result;
+}
+
+export async function deleteCloudStoreItem(id) {
+  if (!isSupabaseConfigured || !supabase) return;
+  const response = await fetch('/api/admin/store-items', { method: 'DELETE', headers: { 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ id }) });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || 'Could not remove this item from Supabase.');
+}
+
+export async function deleteCloudDefaultItems() {
+  if (!isSupabaseConfigured || !supabase) return;
+  const response = await fetch('/api/admin/store-items', { method: 'DELETE', headers: { 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ restoreDefaults: true }) });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || 'Could not restore the default catalogue in Supabase.');
+}
+
+export async function fetchCloudStoreItems() {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const { data, error } = await supabase.from('store_items').select('id,slot_type,payload,image_path,image_url,updated_at').order('updated_at', { ascending: false });
+  throwSupabaseError(error);
+  const result = { customStoreItems: [], catalogOverrides: { hiddenProductIds: [], productOverrides: {} }, homePageImages: {} };
+  for (const row of data || []) {
+    const payload = row.payload || {};
+    if (row.slot_type === 'home_photo') {
+      if (row.image_url) result.homePageImages[row.id] = row.image_url;
+      continue;
+    }
+    if (row.slot_type === 'product' && payload.source === 'default') {
+      if (payload.deleted) result.catalogOverrides.hiddenProductIds.push(row.id);
+      else if (payload.override) result.catalogOverrides.productOverrides[row.id] = { ...payload.override, ...(row.image_url ? { image: row.image_url } : {}) };
+      continue;
+    }
+    result.customStoreItems.push({ ...payload, id: row.id, imageDataUrl: row.image_url || payload.imageDataUrl || '' });
+  }
+  return result;
+}
+
+export async function insertCloudOrder(order) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const response = await fetch('/api/store/orders', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(order) });
+  if (!response.ok) throw new Error('Could not sync order to Supabase.');
+  return order;
+}
+
+export async function insertCloudSubscriber(subscriber) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const response = await fetch('/api/store/subscribers', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(subscriber) });
+  if (!response.ok) throw new Error('Could not sync newsletter sign-up to Supabase.');
+  return subscriber;
+}
+
+export async function fetchCloudAdminData() {
+  if (!isSupabaseConfigured) return null;
+  const response = await fetch('/api/admin/store-data', { credentials: 'same-origin', cache: 'no-store' });
+  if (!response.ok) throw new Error('Could not load Supabase orders and newsletter sign-ups.');
+  return response.json();
+}
 
 const seededAnalytics = {
   orders: [
@@ -90,6 +172,7 @@ const seededAnalytics = {
   ],
   customStoreItems: [],
   catalogOverrides: { hiddenProductIds: [], productOverrides: {} },
+  homePageImages: {},
 };
 
 function createId(prefix) {
@@ -111,7 +194,12 @@ export function getStoreAnalytics() {
       const customStoreItems = storedCustomItems
         ? JSON.parse(storedCustomItems)
         : (Array.isArray(parsed.customStoreItems) ? parsed.customStoreItems : []);
+      const storedHomePageImages = window.localStorage.getItem(HOME_PAGE_IMAGES_KEY);
+      const homePageImages = storedHomePageImages
+        ? JSON.parse(storedHomePageImages)
+        : (parsed.homePageImages && typeof parsed.homePageImages === 'object' ? parsed.homePageImages : {});
       if (!storedCustomItems && customStoreItems.length) window.localStorage.setItem(CUSTOM_STORE_ITEMS_KEY, JSON.stringify(customStoreItems));
+      if (!storedHomePageImages && Object.keys(homePageImages).length) window.localStorage.setItem(HOME_PAGE_IMAGES_KEY, JSON.stringify(homePageImages));
       return {
         orders: Array.isArray(parsed.orders) ? parsed.orders : [],
         registeredUsers: Array.isArray(parsed.registeredUsers) ? parsed.registeredUsers : [],
@@ -121,13 +209,15 @@ export function getStoreAnalytics() {
         catalogOverrides: parsed.catalogOverrides && typeof parsed.catalogOverrides === 'object'
           ? { hiddenProductIds: Array.isArray(parsed.catalogOverrides.hiddenProductIds) ? parsed.catalogOverrides.hiddenProductIds : [], productOverrides: parsed.catalogOverrides.productOverrides && typeof parsed.catalogOverrides.productOverrides === 'object' ? parsed.catalogOverrides.productOverrides : {} }
           : { hiddenProductIds: [], productOverrides: {} },
+        homePageImages,
       };
     }
 
     const initialData = cloneSeed();
-    const { customStoreItems, ...coreData } = initialData;
+    const { customStoreItems, homePageImages, ...coreData } = initialData;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(coreData));
     window.localStorage.setItem(CUSTOM_STORE_ITEMS_KEY, JSON.stringify(customStoreItems));
+    window.localStorage.setItem(HOME_PAGE_IMAGES_KEY, JSON.stringify(homePageImages));
     return initialData;
   } catch {
     return cloneSeed();
@@ -141,7 +231,11 @@ function saveStoreAnalytics(data) {
     if (window.localStorage.getItem(CUSTOM_STORE_ITEMS_KEY) !== productData) {
       window.localStorage.setItem(CUSTOM_STORE_ITEMS_KEY, productData);
     }
-    const { customStoreItems, ...coreData } = data;
+    const homePageImageData = JSON.stringify(data.homePageImages || {});
+    if (window.localStorage.getItem(HOME_PAGE_IMAGES_KEY) !== homePageImageData) {
+      window.localStorage.setItem(HOME_PAGE_IMAGES_KEY, homePageImageData);
+    }
+    const { customStoreItems, homePageImages, ...coreData } = data;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(coreData));
   } catch {
     // Keep the shopping flow working if browser storage is unavailable.
@@ -161,6 +255,7 @@ export function logStoreOrder(order) {
   };
   analytics.orders.unshift(entry);
   saveStoreAnalytics(analytics);
+  if (isSupabaseConfigured) void insertCloudOrder(entry).catch((error) => console.error('Supabase order sync failed:', error));
   return entry;
 }
 
@@ -235,6 +330,7 @@ export function logNewsletterSubscriber(email) {
   const entry = { id: createId('subscriber'), email: normalizedEmail, timestamp: new Date().toISOString() };
   analytics.newsletterSubscribers.unshift(entry);
   saveStoreAnalytics(analytics);
+  if (isSupabaseConfigured) void insertCloudSubscriber(entry).catch((error) => console.error('Supabase subscriber sync failed:', error));
   return entry;
 }
 
@@ -442,6 +538,14 @@ export function saveDefaultProductOverride(productId, override) {
   saveStoreAnalytics(analytics);
 }
 
+export async function syncDefaultProductOverrideToCloud(productId, override) {
+  if (!isSupabaseConfigured) return null;
+  const payload = { source: 'default', override: { ...override } };
+  const imageDataUrl = typeof payload.override.image === 'string' && payload.override.image.startsWith('data:') ? payload.override.image : null;
+  if (imageDataUrl) delete payload.override.image;
+  return upsertCloudStoreItem({ id: productId, slotType: 'product', payload, imageDataUrl });
+}
+
 export function deleteDefaultStoreProduct(productId) {
   if (typeof window === 'undefined') return;
   const analytics = getStoreAnalytics();
@@ -450,9 +554,50 @@ export function deleteDefaultStoreProduct(productId) {
   saveStoreAnalytics(analytics);
 }
 
+export async function deleteCloudDefaultStoreProduct(productId) {
+  if (!isSupabaseConfigured || !supabase) return;
+  await upsertCloudStoreItem({ id: productId, slotType: 'product', payload: { source: 'default', deleted: true } });
+}
+
 export function restoreDefaultStoreCatalog() {
   if (typeof window === 'undefined') return;
   const analytics = getStoreAnalytics();
   analytics.catalogOverrides = { hiddenProductIds: [], productOverrides: {} };
   saveStoreAnalytics(analytics);
+}
+
+export async function restoreCloudDefaultStoreCatalog() {
+  await deleteCloudDefaultItems();
+}
+
+function persistHomePageImages(analytics) {
+  try {
+    window.localStorage.setItem(HOME_PAGE_IMAGES_KEY, JSON.stringify(analytics.homePageImages || {}));
+  } catch {
+    throw new Error('There is not enough browser storage to save this home page photo. Try a smaller image.');
+  }
+}
+
+export async function saveHomePageImage(slot, imageDataUrl) {
+  if (typeof window === 'undefined') throw new Error('Home page photos can only be saved from the browser.');
+  const analytics = getStoreAnalytics();
+  const slotInfo = HOME_PAGE_IMAGE_SLOTS.find((entry) => entry.id === slot);
+  const cloudRow = await upsertCloudStoreItem({
+    id: slot,
+    slotType: 'home_photo',
+    payload: { label: slotInfo?.label || slot },
+    imageDataUrl,
+  });
+  analytics.homePageImages = { ...(analytics.homePageImages || {}), [slot]: cloudRow?.image_url || imageDataUrl };
+  persistHomePageImages(analytics);
+}
+
+export async function resetHomePageImage(slot) {
+  if (typeof window === 'undefined') return;
+  await deleteCloudStoreItem(slot);
+  const analytics = getStoreAnalytics();
+  const homePageImages = { ...(analytics.homePageImages || {}) };
+  delete homePageImages[slot];
+  analytics.homePageImages = homePageImages;
+  persistHomePageImages(analytics);
 }

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type SyntheticEvent } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Heart, LockKeyhole, Search, ShoppingBag, Star, UserRound, X } from 'lucide-react';
-import { generateOrderReference, getStoreAnalytics, logNewsletterSubscriber, logRegisteredUser, logStoreOrder, recordActivityFriction, recordActivityPage, updateActivityIdentity, type StoreProductRecord } from '@/src/utils/storeAnalytics';
+import { fetchCloudStoreItems, generateOrderReference, getStoreAnalytics, isSupabaseConfigured, logNewsletterSubscriber, logRegisteredUser, logStoreOrder, recordActivityFriction, recordActivityPage, updateActivityIdentity, type StoreProductRecord } from '@/src/utils/storeAnalytics';
 import { defaultStoreProducts } from '@/src/utils/defaultStoreCatalog';
 import InshutiLogo from '@/src/components/InshutiLogo';
 
@@ -314,17 +314,24 @@ export default function ShopPage() {
   };
 
   useEffect(() => {
-    const refreshUploadedItems = () => {
-      const data = getStoreAnalytics();
+    let active = true;
+    const refreshUploadedItems = async () => {
+      let data = getStoreAnalytics();
+      if (isSupabaseConfigured) {
+        const cloud = await fetchCloudStoreItems();
+        if (cloud) data = { ...data, ...cloud };
+      }
+      if (!active) return;
       setUploadedItems(data.customStoreItems || []);
       setCatalogOverrides(data.catalogOverrides || { hiddenProductIds: [], productOverrides: {} });
     };
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === 'inshuti-store-analytics' || event.key === 'inshuti-store-products') refreshUploadedItems();
+      if (event.key === 'inshuti-store-analytics' || event.key === 'inshuti-store-products') void refreshUploadedItems();
     };
     window.addEventListener('storage', handleStorage);
-    try {
-      refreshUploadedItems();
+    const initializeShop = async () => {
+      try {
+      await refreshUploadedItems();
       const storedSaved = JSON.parse(window.localStorage.getItem('inshuti-shop-saved') || '[]');
       if (Array.isArray(storedSaved)) setSavedProductIds(storedSaved.filter((id): id is string => typeof id === 'string'));
 
@@ -363,12 +370,13 @@ export default function ShopPage() {
         setAnalyticsCookies(Boolean(storedCookiePreferences.analytics));
         setPersonalizationCookies(Boolean(storedCookiePreferences.personalization));
       }
-    } catch {
-      // Invalid local data should not prevent the shop page from opening.
-    } finally {
-      setShopDataLoaded(true);
-    }
-    return () => window.removeEventListener('storage', handleStorage);
+      } catch {
+        // Invalid local data should not prevent the shop page from opening.
+      }
+      if (active) setShopDataLoaded(true);
+    };
+    void initializeShop();
+    return () => { active = false; window.removeEventListener('storage', handleStorage); };
   }, []);
 
   useEffect(() => {

@@ -19,7 +19,7 @@ import {
   Sun,
   Moon,
 } from 'lucide-react';
-import { recordActivityFriction, recordActivityPage } from '@/src/utils/storeAnalytics';
+import { HOME_PAGE_IMAGE_SLOTS, fetchCloudStoreItems, getStoreAnalytics, isSupabaseConfigured, recordActivityFriction, recordActivityPage, type HomePageImageSlot } from '@/src/utils/storeAnalytics';
 import InshutiLogo from '@/src/components/InshutiLogo';
 
 function TeamAvatar({
@@ -77,6 +77,7 @@ const heroProductImages = [
 export default function LandingPage() {
   const [lang, setLang] = useState<'en' | 'rw'>('en');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [homePageImages, setHomePageImages] = useState<Partial<Record<HomePageImageSlot, string>>>({});
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [heroBackgroundIndex, setHeroBackgroundIndex] = useState(0);
   const [heroProductIndex, setHeroProductIndex] = useState(0);
@@ -88,6 +89,25 @@ export default function LandingPage() {
   const [momoInstructionsOpen, setMomoInstructionsOpen] = useState(false);
   const orderSubmittedRef = useRef(false);
   const [shopperName, setShopperName] = useState('');
+  const displayedHeroProductImages = heroProductImages.map((image, index) => homePageImages[HOME_PAGE_IMAGE_SLOTS[index].id] || image);
+  const wardrobeFeatureImage = homePageImages['home-wardrobe-feature'] || heroProductImages[heroProductIndex];
+
+  useEffect(() => {
+    const refreshHomePageImages = async () => {
+      const localImages = getStoreAnalytics().homePageImages || {};
+      if (!isSupabaseConfigured) { setHomePageImages(localImages); return; }
+      try {
+        const cloud = await fetchCloudStoreItems();
+        setHomePageImages(cloud?.homePageImages || {});
+      } catch (error) { console.error('Supabase home page photo sync failed:', error); }
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'inshuti-home-page-images' || event.key === 'inshuti-store-analytics') refreshHomePageImages();
+    };
+    void refreshHomePageImages();
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   useEffect(() => {
     try {
@@ -546,7 +566,7 @@ export default function LandingPage() {
             </div>
 
             <div aria-label="INSHUTI apparel collection" className="relative mx-auto mt-12 h-[15rem] w-full max-w-5xl sm:mt-16 sm:h-[19rem] lg:mt-20 lg:h-[22rem]" style={{ perspective: '1400px' }}>
-              {heroProductImages.map((image, index) => {
+              {displayedHeroProductImages.map((image, index) => {
                 const cardPlacement = index === 1
                     ? 'left-1/2 top-1/2 z-20 w-[46%] max-w-[300px] -translate-x-1/2 -translate-y-1/2 scale-[1.08]'
                   : index === 0
@@ -566,7 +586,7 @@ export default function LandingPage() {
                     } : undefined}
                   >
                     <div className={`h-full w-full transition-transform duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] ${index === 1 ? 'will-change-transform' : ''}`} style={{ transform: `translateY(${heroParallaxOffset * parallaxFactor}px) rotateX(${index === 1 ? (1.35 - heroCenterScale) * 3 : 0}deg)` }}>
-                      <img src={image} alt={`INSHUTI garment ${index + 1}`} className="h-full w-full object-contain" />
+                      <img src={image} alt={`INSHUTI garment ${index + 1}`} className={`h-full w-full ${homePageImages[HOME_PAGE_IMAGE_SLOTS[index].id] ? 'object-cover object-center' : 'object-contain'}`} />
                     </div>
                   </figure>
                 );
@@ -629,7 +649,7 @@ export default function LandingPage() {
               className="relative mx-auto w-full max-w-[300px] sm:max-w-[330px]"
             >
               <div className={`transition-all duration-700 ease-in-out ${heroProductExiting ? 'translate-x-16 opacity-0' : 'translate-x-0 opacity-100'}`}>
-                <img src={heroProductImages[heroProductIndex]} alt="INSHUTI T-shirt" className="animate-float-shirt h-auto w-full object-contain drop-shadow-2xl" />
+                <img src={wardrobeFeatureImage} alt="INSHUTI T-shirt" className={`animate-float-shirt w-full drop-shadow-2xl ${homePageImages['home-wardrobe-feature'] ? 'aspect-[4/5] object-cover object-center' : 'h-auto object-contain'}`} />
               </div>
             </motion.div>
           </div>
